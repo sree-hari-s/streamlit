@@ -17,53 +17,30 @@
 // Private members use _.
 /* eslint-disable no-underscore-dangle */
 
-import {
-  Schema as ArrowSchema,
-  Dictionary,
-  Field,
-  Null,
-  Table,
-  tableFromIPC,
-  Vector,
-} from "apache-arrow"
+import { Dictionary, Field, Vector } from "apache-arrow"
 import { immerable, produce } from "immer"
 import range from "lodash/range"
-import unzip from "lodash/unzip"
 import zip from "lodash/zip"
 
 import { IArrow, Styler as StylerProto } from "@streamlit/lib/src/proto"
 import { isNullOrUndefined } from "@streamlit/lib/src/util/utils"
 
 import {
+  Columns,
+  Data,
+  Index,
+  parseArrowIpcBytes,
+  Types,
+} from "./arrowParseUtils"
+import {
   DataType,
   getTypeName,
   IndexTypeName,
-  isRangeIndex,
   RangeIndex,
   sameDataTypes,
   sameIndexTypes,
   Type,
 } from "./arrowTypeUtils"
-/**
- * A row-major grid of DataFrame index header values.
- */
-type IndexValue = Vector | number[]
-
-/**
- * A row-major grid of DataFrame index header values.
- */
-type Index = IndexValue[]
-
-/**
- * A row-major grid of DataFrame column header values.
- * NOTE: ArrowJS automatically formats the columns in schema, i.e. we always get strings.
- */
-type Columns = string[][]
-
-/**
- * A row-major grid of DataFrame data.
- */
-type Data = Table
 
 // This type should be recursive as there can be nested structures.
 // Example: list[int64], list[list[unicode]], etc.
@@ -80,84 +57,6 @@ type Data = Table
 //   Object = "object",
 //   List = "list[int64]",
 // }
-
-/** DataFrame index and data types. */
-interface Types {
-  /** Types for each index column. */
-  index: Type[]
-
-  /** Types for each data column. */
-  // NOTE: `DataTypeName` should be used here, but as it's hard (maybe impossible)
-  // to define such recursive types in TS, `string` will suffice for now.
-  data: Type[]
-}
-
-/**
- * The Arrow table schema. It's a blueprint that tells us where data
- * is stored in the associated table. (Arrow stores the schema as a JSON string,
- * and we parse it into this typed object - so these member names come from
- * Arrow.)
- */
-interface Schema {
-  /**
-   * The DataFrame's index names (either provided by user or generated,
-   * guaranteed unique). It is used to fetch the index data. Each DataFrame has
-   * at least 1 index. There are many different index types; for most of them
-   * the index name is stored as a string, but for the "range" index a `RangeIndex`
-   * object is used. A `RangeIndex` is only ever by itself, never as part of a
-   * multi-index. The length represents the dimensions of the DataFrame's index grid.
-   *
-   * Example:
-   * Range index: [{ kind: "range", name: null, start: 1, step: 1, stop: 5 }]
-   * Other index types: ["__index_level_0__", "foo", "bar"]
-   */
-  index_columns: (string | RangeIndex)[]
-
-  /**
-   * Schemas for each column (index *and* data columns) in the DataFrame.
-   */
-  columns: ColumnSchema[]
-
-  /**
-   * DataFrame column headers.
-   * The length represents the dimensions of the DataFrame's columns grid.
-   */
-  column_indexes: ColumnSchema[]
-}
-
-/**
- * Metadata for a single column in an Arrow table.
- * (This can describe an index *or* a data column.)
- */
-interface ColumnSchema {
-  /**
-   * The fieldName of the column.
-   * For a single-index column, this is just the name of the column (e.g. "foo").
-   * For a multi-index column, this is a stringified tuple (e.g. "('1','foo')")
-   */
-  field_name: string
-
-  /**
-   * Column-specific metadata. Only used by certain column types
-   * (e.g. CategoricalIndex has `num_categories`.)
-   */
-  metadata: Record<string, any> | null
-
-  /** The name of the column. */
-  name: string | null
-
-  /**
-   * The type of the column. When `pandas_type == "object"`, `numpy_type`
-   * will have a more specific type.
-   */
-  pandas_type: string
-
-  /**
-   * When `pandas_type === "object"`, this field contains the object type.
-   * If pandas_type has another value, numpy_type is ignored.
-   */
-  numpy_type: string
-}
 
 /** DataFrame's Styler information. */
 interface Styler {
@@ -265,18 +164,11 @@ export class Quiver {
   private readonly _styler?: Styler
 
   constructor(element: IArrow) {
-    const table = tableFromIPC(element.data)
-    const schema = Quiver.parseSchema(table)
-    const rawColumns = Quiver.getRawColumns(schema)
-    const fields = Quiver.parseFields(table.schema)
+    const { index, columns, data, types, fields, indexNames } =
+      parseArrowIpcBytes(element.data)
 
-    const index = Quiver.parseIndex(table, schema)
-    const columns = Quiver.parseColumns(schema)
-    const indexNames = Quiver.parseIndexNames(schema)
-    const data = Quiver.parseData(table, columns, rawColumns)
-    const types = Quiver.parseTypes(table, schema)
     const styler = element.styler
-      ? Quiver.parseStyler(element.styler as StylerProto)
+      ? parseStyler(element.styler as StylerProto)
       : undefined
 
     // The assignment is done below to avoid partially populating the instance
@@ -288,144 +180,6 @@ export class Quiver {
     this._fields = fields
     this._styler = styler
     this._indexNames = indexNames
-  }
-
-  /** Parse Arrow table's schema from a JSON string to an object. */
-  private static parseSchema(table: Table): Schema {
-    const schema = table.schema.metadata.get("pandas")
-    if (isNullOrUndefined(schema)) {
-      // This should never happen!
-      throw new Error("Table schema is missing.")
-    }
-    return JSON.parse(schema)
-  }
-
-  /** Get unprocessed column names for data columns. Needed for selecting
-   * data columns when there are multi-columns. */
-  private static getRawColumns(schema: Schema): string[] {
-    return (
-      schema.columns
-        .map(columnSchema => columnSchema.field_name)
-        // Filter out all index columns
-        .filter(columnName => !schema.index_columns.includes(columnName))
-    )
-  }
-
-  /** Parse DataFrame's index header values. */
-  private static parseIndex(table: Table, schema: Schema): Index {
-    return schema.index_columns
-      .map(indexName => {
-        // Generate a range using the "range" index metadata.
-        if (isRangeIndex(indexName)) {
-          const { start, stop, step } = indexName
-          return range(start, stop, step)
-        }
-
-        // Otherwise, use the index name to get the index column data.
-        const column = table.getChild(indexName as string)
-        if (column instanceof Vector && column.type instanceof Null) {
-          return null
-        }
-        return column
-      })
-      .filter(
-        (column: IndexValue | null): column is IndexValue => column !== null
-      )
-  }
-
-  /** Parse DataFrame's index header names. */
-  private static parseIndexNames(schema: Schema): string[] {
-    return schema.index_columns.map(indexName => {
-      // Range indices are treated differently since they
-      // contain additional metadata (e.g. start, stop, step).
-      // and not just the name.
-      if (isRangeIndex(indexName)) {
-        const { name } = indexName
-        return name || ""
-      }
-      if (indexName.startsWith("__index_level_")) {
-        // Unnamed indices can have a name like "__index_level_0__".
-        return ""
-      }
-      return indexName
-    })
-  }
-
-  /** Parse DataFrame's column header values. */
-  private static parseColumns(schema: Schema): Columns {
-    // If DataFrame `columns` has multi-level indexing, the length of
-    // `column_indexes` will show how many levels there are.
-    const isMultiIndex = schema.column_indexes.length > 1
-
-    // Perform the following transformation:
-    // ["('1','foo')", "('2','bar')", "('3','baz')"] -> ... -> [["1", "2", "3"], ["foo", "bar", "baz"]]
-    return unzip(
-      schema.columns
-        .map(columnSchema => columnSchema.field_name)
-        // Filter out all index columns
-        .filter(fieldName => !schema.index_columns.includes(fieldName))
-        .map(fieldName =>
-          isMultiIndex
-            ? JSON.parse(
-                fieldName
-                  .replace(/\(/g, "[")
-                  .replace(/\)/g, "]")
-                  .replace(/'/g, '"')
-              )
-            : [fieldName]
-        )
-    )
-  }
-
-  /** Parse DataFrame's data. */
-  private static parseData(
-    table: Table,
-    columns: Columns,
-    rawColumns: string[]
-  ): Data {
-    const numDataRows = table.numRows
-    const numDataColumns = columns.length > 0 ? columns[0].length : 0
-    if (numDataRows === 0 || numDataColumns === 0) {
-      return table.select([])
-    }
-
-    return table.select(rawColumns)
-  }
-
-  /** Parse DataFrame's index and data types. */
-  private static parseTypes(table: Table, schema: Schema): Types {
-    const index = Quiver.parseIndexType(schema)
-    const data = Quiver.parseDataType(table, schema)
-    return { index, data }
-  }
-
-  /** Parse types for each index column. */
-  private static parseIndexType(schema: Schema): Type[] {
-    return schema.index_columns.map(indexName => {
-      if (isRangeIndex(indexName)) {
-        return {
-          pandas_type: IndexTypeName.RangeIndex,
-          numpy_type: IndexTypeName.RangeIndex,
-          meta: indexName as RangeIndex,
-        }
-      }
-
-      // Find the index column we're looking for in the schema.
-      const indexColumn = schema.columns.find(
-        column => column.field_name === indexName
-      )
-
-      // This should never happen!
-      if (!indexColumn) {
-        throw new Error(`${indexName} index not found.`)
-      }
-
-      return {
-        pandas_type: indexColumn.pandas_type,
-        numpy_type: indexColumn.numpy_type,
-        meta: indexColumn.metadata,
-      }
-    })
   }
 
   /**
@@ -459,37 +213,6 @@ export class Quiver {
       return values
     }
     return undefined
-  }
-
-  /** Parse types for each non-index column. */
-  private static parseDataType(table: Table, schema: Schema): Type[] {
-    return (
-      schema.columns
-        // Filter out all index columns
-        .filter(
-          columnSchema =>
-            !schema.index_columns.includes(columnSchema.field_name)
-        )
-        .map(columnSchema => ({
-          pandas_type: columnSchema.pandas_type,
-          numpy_type: columnSchema.numpy_type,
-          meta: columnSchema.metadata,
-        }))
-    )
-  }
-
-  /** Parse styler information from proto. */
-  private static parseStyler(styler: StylerProto): Styler {
-    return {
-      uuid: styler.uuid,
-      caption: styler.caption,
-      styles: styler.styles,
-
-      // Recursively create a new Quiver instance for Styler's display values.
-      // This values will be used for rendering the DataFrame, while the original values
-      // will be used for sorting, etc.
-      displayValues: new Quiver({ data: styler.displayValues }),
-    }
   }
 
   /** Concatenate the original DataFrame index with the given one. */
@@ -914,15 +637,18 @@ st.add_rows(my_styler.data)
       draft._types = types
     })
   }
+}
 
-  private static parseFields(schema: ArrowSchema): Record<string, Field> {
-    // None-index data columns are listed first, and all index columns listed last
-    // within the fields array in arrow.
-    return Object.fromEntries(
-      (schema.fields || []).map((field, index) => [
-        field.name.startsWith("__index_level_") ? field.name : String(index),
-        field,
-      ])
-    )
+/** Parse styler information from proto. */
+function parseStyler(styler: StylerProto): Styler {
+  return {
+    uuid: styler.uuid,
+    caption: styler.caption,
+    styles: styler.styles,
+
+    // Recursively create a new Quiver instance for Styler's display values.
+    // This values will be used for rendering the DataFrame, while the original values
+    // will be used for sorting, etc.
+    displayValues: new Quiver({ data: styler.displayValues }),
   }
 }
