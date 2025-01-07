@@ -19,12 +19,11 @@
 
 import { Dictionary, Field, Vector } from "apache-arrow"
 import { immerable, produce } from "immer"
-import range from "lodash/range"
-import zip from "lodash/zip"
 
 import { IArrow, Styler as StylerProto } from "@streamlit/lib/src/proto"
 import { isNullOrUndefined } from "@streamlit/lib/src/util/utils"
 
+import { concat } from "./arrowConcatUtils"
 import {
   Columns,
   Data,
@@ -32,16 +31,7 @@ import {
   parseArrowIpcBytes,
   Types,
 } from "./arrowParseUtils"
-import {
-  DataType,
-  getTypeName,
-  IndexTypeName,
-  RangeIndex,
-  sameDataTypes,
-  sameIndexTypes,
-  Type,
-} from "./arrowTypeUtils"
-
+import { DataType, IndexTypeName, Type } from "./arrowTypeUtils"
 // This type should be recursive as there can be nested structures.
 // Example: list[int64], list[list[unicode]], etc.
 // NOTE: Commented out until we can find a way to properly define recursive types.
@@ -213,166 +203,6 @@ export class Quiver {
       return values
     }
     return undefined
-  }
-
-  /** Concatenate the original DataFrame index with the given one. */
-  private concatIndexes(otherIndex: Index, otherIndexTypes: Type[]): Index {
-    // If one of the `index` arrays is empty, return the other one.
-    // Otherwise, they will have different types and an error will be thrown.
-    if (otherIndex.length === 0) {
-      return this._index
-    }
-    if (this._index.length === 0) {
-      return otherIndex
-    }
-
-    // Make sure indexes have same types.
-    if (!sameIndexTypes(this._types.index, otherIndexTypes)) {
-      const receivedIndexTypes = otherIndexTypes.map(index =>
-        getTypeName(index)
-      )
-      const expectedIndexTypes = this._types.index.map(index =>
-        getTypeName(index)
-      )
-
-      throw new Error(`
-Unsupported operation. The data passed into \`add_rows()\` must have the same
-index signature as the original data.
-
-In this case, \`add_rows()\` received \`${JSON.stringify(receivedIndexTypes)}\`
-but was expecting \`${JSON.stringify(expectedIndexTypes)}\`.
-`)
-    }
-
-    if (this._types.index.length === 0) {
-      // This should never happen!
-      throw new Error("There was an error while parsing index types.")
-    }
-
-    // NOTE: "range" index cannot be a part of a multi-index, i.e.
-    // if the index type is "range", there will only be one element in the index array.
-    if (this._types.index[0].pandas_type === IndexTypeName.RangeIndex) {
-      // Continue the sequence for a "range" index.
-      // NOTE: The metadata of the original index will be used, i.e.
-      // if both indexes are of type "range" and they have different
-      // metadata (start, step, stop) values, the metadata of the given
-      // index will be ignored.
-      const { step, stop } = this._types.index[0].meta as RangeIndex
-      otherIndex = [
-        range(
-          stop,
-          // End is not inclusive
-          stop + otherIndex[0].length * step,
-          step
-        ),
-      ]
-    }
-
-    // Concatenate each index with its counterpart in the other table
-    const zipped = zip(this._index, otherIndex)
-    // @ts-expect-error We know the two indexes are of the same size
-    return zipped.map(a => a[0].concat(a[1]))
-  }
-
-  /** Concatenate the original DataFrame data with the given one. */
-  private concatData(otherData: Data, otherDataType: Type[]): Data {
-    // If one of the `data` arrays is empty, return the other one.
-    // Otherwise, they will have different types and an error will be thrown.
-    if (otherData.numCols === 0) {
-      return this._data
-    }
-    if (this._data.numCols === 0) {
-      return otherData
-    }
-
-    // Make sure `data` arrays have the same types.
-    if (!sameDataTypes(this._types.data, otherDataType)) {
-      const receivedDataTypes = otherDataType.map(t => t.pandas_type)
-      const expectedDataTypes = this._types.data.map(t => t.pandas_type)
-
-      throw new Error(`
-Unsupported operation. The data passed into \`add_rows()\` must have the same
-data signature as the original data.
-
-In this case, \`add_rows()\` received \`${JSON.stringify(receivedDataTypes)}\`
-but was expecting \`${JSON.stringify(expectedDataTypes)}\`.
-`)
-    }
-
-    // Remove extra columns from the "other" DataFrame.
-    // Columns from otherData are used by index without checking column names.
-    const slicedOtherData = otherData.selectAt(range(0, this._data.numCols))
-    return this._data.concat(slicedOtherData)
-  }
-
-  /** Concatenate index and data types. */
-  private concatTypes(otherTypes: Types): Types {
-    const index = this.concatIndexTypes(otherTypes.index)
-    const data = this.concatDataTypes(otherTypes.data)
-    return { index, data }
-  }
-
-  /** Concatenate index types. */
-  private concatIndexTypes(otherIndexTypes: Type[]): Type[] {
-    // If one of the `types` arrays is empty, return the other one.
-    // Otherwise, an empty array will be returned.
-    if (otherIndexTypes.length === 0) {
-      return this._types.index
-    }
-    if (this._types.index.length === 0) {
-      return otherIndexTypes
-    }
-
-    // Make sure indexes have same types.
-    if (!sameIndexTypes(this._types.index, otherIndexTypes)) {
-      const receivedIndexTypes = otherIndexTypes.map(index =>
-        getTypeName(index)
-      )
-      const expectedIndexTypes = this._types.index.map(index =>
-        getTypeName(index)
-      )
-
-      throw new Error(`
-Unsupported operation. The data passed into \`add_rows()\` must have the same
-index signature as the original data.
-
-In this case, \`add_rows()\` received \`${JSON.stringify(receivedIndexTypes)}\`
-but was expecting \`${JSON.stringify(expectedIndexTypes)}\`.
-`)
-    }
-
-    // TL;DR This sets the new stop value.
-    return this._types.index.map(indexType => {
-      // NOTE: "range" index cannot be a part of a multi-index, i.e.
-      // if the index type is "range", there will only be one element in the index array.
-      if (indexType.pandas_type === IndexTypeName.RangeIndex) {
-        const { stop, step } = indexType.meta as RangeIndex
-        const {
-          start: otherStart,
-          stop: otherStop,
-          step: otherStep,
-        } = otherIndexTypes[0].meta as RangeIndex
-        const otherRangeIndexLength = (otherStop - otherStart) / otherStep
-        const newStop = stop + otherRangeIndexLength * step
-        return {
-          ...indexType,
-          meta: {
-            ...indexType.meta,
-            stop: newStop,
-          },
-        }
-      }
-      return indexType
-    })
-  }
-
-  /** Concatenate types of data columns. */
-  private concatDataTypes(otherDataTypes: Type[]): Type[] {
-    if (this._types.data.length === 0) {
-      return otherDataTypes
-    }
-
-    return this._types.data
   }
 
   /** DataFrame's index (matrix of row names). */
@@ -623,18 +453,24 @@ st.add_rows(my_styler.data)
       return produce(other, (draft: Quiver) => draft)
     }
 
-    // Concatenate all data into temporary variables. If any of
-    // these operations fail, an error will be thrown and we'll prematurely
-    // exit the function.
-    const index = this.concatIndexes(other._index, other._types.index)
-    const data = this.concatData(other._data, other._types.data)
-    const types = this.concatTypes(other._types)
+    const {
+      index: newIndex,
+      data: newData,
+      types: newTypes,
+    } = concat(
+      this._types,
+      this._index,
+      this._data,
+      other._types,
+      other._index,
+      other._data
+    )
 
     // If we get here, then we had no concatenation errors.
     return produce(this, (draft: Quiver) => {
-      draft._index = index
-      draft._data = data
-      draft._types = types
+      draft._index = newIndex
+      draft._data = newData
+      draft._types = newTypes
     })
   }
 }
