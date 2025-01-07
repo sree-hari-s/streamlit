@@ -33,6 +33,8 @@ import {
 import {
   Type as ArrowType,
   getTypeName,
+  isBooleanType,
+  isNumericType,
 } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 import {
   isNullOrUndefined,
@@ -168,28 +170,10 @@ export function getColumnTypeFromArrow(arrowType: ArrowType): ColumnCreator {
   if (["object", "bytes"].includes(typeName)) {
     return ObjectColumn
   }
-  if (["bool"].includes(typeName)) {
+  if (isBooleanType(arrowType)) {
     return CheckboxColumn
   }
-  if (
-    [
-      "int8",
-      "int16",
-      "int32",
-      "int64",
-      "uint8",
-      "uint16",
-      "uint32",
-      "uint64",
-      "float16",
-      "float32",
-      "float64",
-      "float96",
-      "float128",
-      "range", // The default index in pandas uses a range type.
-      "decimal",
-    ].includes(typeName)
-  ) {
+  if (isNumericType(arrowType)) {
     return NumberColumn
   }
   if (typeName === "categorical") {

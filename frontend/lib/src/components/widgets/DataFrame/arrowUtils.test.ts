@@ -14,10 +14,7 @@
  * limitations under the License.
  */
 
-import {
-  Type as ArrowType,
-  getTypeName,
-} from "@streamlit/lib/src/dataframes/arrowTypeUtils"
+import { Type as ArrowType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 import { DataFrameCell, Quiver } from "@streamlit/lib/src/dataframes/Quiver"
 import {
   CATEGORICAL_COLUMN,
@@ -52,7 +49,6 @@ import {
   TextColumn,
   TimeColumn,
 } from "./columns"
-import { isIntegerType } from "./isIntegerType"
 
 const MOCK_TEXT_COLUMN = TextColumn({
   id: "1",
@@ -947,79 +943,6 @@ describe("getColumnTypeFromArrow", () => {
     "interprets %p as column type: %p",
     (arrowType: ArrowType, expectedType: ColumnCreator) => {
       expect(getColumnTypeFromArrow(arrowType)).toEqual(expectedType)
-    }
-  )
-})
-
-describe("isIntegerType", () => {
-  it.each([
-    [
-      {
-        pandas_type: "float64",
-        numpy_type: "float64",
-      },
-      false,
-    ],
-    [
-      {
-        pandas_type: "int64",
-        numpy_type: "int64",
-      },
-      true,
-    ],
-    [
-      {
-        pandas_type: "object",
-        numpy_type: "int16",
-      },
-      true,
-    ],
-    [
-      {
-        pandas_type: "range",
-        numpy_type: "range",
-      },
-      true,
-    ],
-    [
-      {
-        pandas_type: "uint64",
-        numpy_type: "uint64",
-      },
-      true,
-    ],
-    [
-      {
-        pandas_type: "unicode",
-        numpy_type: "object",
-      },
-      false,
-    ],
-    [
-      {
-        pandas_type: "bool",
-        numpy_type: "bool",
-      },
-      false,
-    ],
-    [
-      {
-        pandas_type: "categorical",
-        numpy_type: "int8",
-      },
-      false,
-    ],
-    [
-      {
-        pandas_type: "object",
-        numpy_type: "interval[int64, both]",
-      },
-      false,
-    ],
-  ])(
-    "interprets %p as integer type: %p",
-    (arrowType: ArrowType, expected: boolean) => {
-      expect(isIntegerType(getTypeName(arrowType))).toEqual(expected)
     }
   )
 })
