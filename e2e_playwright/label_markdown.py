@@ -14,6 +14,8 @@
 
 import datetime
 
+import numpy as np
+
 import streamlit as st
 
 valid_label = ":material/check_circle: :streamlit: ![Image Text](app/static/cat.jpg) **Bold Text** *Italicized* ~Strikethough~ `Code Block` 🐶 :joy: <- -> <-> -- >= <= ~="
@@ -58,6 +60,8 @@ Horizontal Rule:
 
 """
 
+img = np.repeat(0, 10000).reshape(100, 100)
+
 # Invalid Markdown: table elements, headings, unordered/ordered lists, task lists, horizontal rules, & blockquotes
 with st.container():
     st.subheader(
@@ -79,6 +83,7 @@ with st.container():
     with st.expander(task_list):
         st.write("Expanded!")
     tabA, tabB = st.tabs([blockquote, horizontal_rule])
+    st.image(img, caption=table)
 
 
 # Bold, italics, strikethrough, code, & shortcodes/emojis/streamlit logo, images - allowed in all
@@ -114,7 +119,7 @@ with st.container():
             ":material/check_circle: Icon",
         ]
     )
-
+    st.image(img, caption=valid_label)
 
 # Colored text - allowed in all
 with st.container():
@@ -146,7 +151,7 @@ with st.container():
             ":orange[orange]",
         ]
     )
-
+    st.image(img, caption=color_label)
 
 # Links - only restricted in buttons
 with st.container():
@@ -174,5 +179,6 @@ with st.container():
     with st.expander(link_label):
         st.write("Expanded!")
     st.tabs([link_label])
+    st.image(img, caption=link_label)
 
 st.selectbox("", [])  # No label

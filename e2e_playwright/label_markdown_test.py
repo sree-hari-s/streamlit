@@ -343,6 +343,26 @@ def test_tabs_labels_handle_markdown(app: Page, assert_snapshot: ImageCompareFun
         )
 
 
+def test_image_captions_handle_markdown(
+    app: Page, assert_snapshot: ImageCompareFunction
+):
+    cases = [
+        ["invalid", "table"],
+        ["valid", "markdown"],
+        ["valid", "colored"],
+        ["valid", "link"],
+    ]
+
+    images = app.get_by_test_id("stImage")
+    expect(images).to_have_count(4)
+
+    for index, case in enumerate(cases):
+        assert_snapshot(
+            images.nth(index),
+            name=f"st_image-{case[0]}_{case[1]}",
+        )
+
+
 def test_empty_labels(app: Page, assert_snapshot: ImageCompareFunction):
     empty_label_selectbox = app.get_by_test_id("stSelectbox").last
     expect(empty_label_selectbox).to_have_text("No options to select.open")
