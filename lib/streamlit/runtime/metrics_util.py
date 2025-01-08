@@ -152,6 +152,7 @@ _ATTRIBUTIONS_TO_CHECK: Final = [
     "streamlit_pydantic",
     "pydantic",
     "plost",
+    "authlib",
 ]
 
 _ETC_MACHINE_ID_PATH = "/etc/machine-id"
