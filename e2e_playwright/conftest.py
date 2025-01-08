@@ -228,9 +228,17 @@ def app_port(worker_id: str) -> int:
     return find_available_port()
 
 
+@pytest.fixture(scope="module")
+def app_server_extra_args() -> list[str]:
+    """Fixture that returns extra arguments to pass to the Streamlit app server."""
+    return []
+
+
 @pytest.fixture(scope="module", autouse=True)
 def app_server(
-    app_port: int, request: FixtureRequest
+    app_port: int,
+    app_server_extra_args: list[str],
+    request: FixtureRequest,
 ) -> Generator[AsyncSubprocess, None, None]:
     """Fixture that starts and stops the Streamlit app server."""
     streamlit_proc = AsyncSubprocess(
@@ -252,6 +260,7 @@ def app_server(
             "none",
             "--server.enableStaticServing",
             "true",
+            *app_server_extra_args,
         ],
         cwd=".",
     )

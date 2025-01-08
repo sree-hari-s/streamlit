@@ -97,3 +97,26 @@ def is_url(
     except ValueError:
         return False
     return False
+
+
+def make_url_path(base_url: str, path: str) -> str:
+    """Make a URL from a base URL and a path.
+
+    Parameters
+    ----------
+    base_url : str
+        The base URL.
+    path : str
+        The path to append to the base URL.
+
+    Returns
+    -------
+    str
+        The resulting URL.
+    """
+    base_url = base_url.strip("/")
+    if base_url:
+        base_url = "/" + base_url
+
+    path = path.lstrip("/")
+    return f"{base_url}/{path}"

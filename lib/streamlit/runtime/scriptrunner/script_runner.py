@@ -123,7 +123,7 @@ class ScriptRunner:
         uploaded_file_mgr: UploadedFileManager,
         script_cache: ScriptCache,
         initial_rerun_data: RerunData,
-        user_info: dict[str, str | None],
+        user_info: dict[str, str | bool | None],
         fragment_storage: FragmentStorage,
         pages_manager: PagesManager,
     ):

@@ -85,7 +85,7 @@ class AppSession:
         uploaded_file_manager: UploadedFileManager,
         script_cache: ScriptCache,
         message_enqueued_callback: Callable[[], None] | None,
-        user_info: dict[str, str | None],
+        user_info: dict[str, str | bool | None],
         session_id_override: str | None = None,
     ) -> None:
         """Initialize the AppSession.
@@ -399,6 +399,10 @@ class AppSession:
         """
         if self._scriptrunner is not None:
             self._scriptrunner.request_stop()
+
+    def clear_user_info(self) -> None:
+        """Clear the user info for this session."""
+        self._user_info.clear()
 
     def _create_scriptrunner(self, initial_rerun_data: RerunData) -> None:
         """Create and run a new ScriptRunner with the given RerunData."""

@@ -26,6 +26,7 @@ import {
   buildWsUri,
   ForwardMsg,
   ForwardMsgCache,
+  getCookie,
   IBackMsg,
   IHostConfigResponse,
   isNullOrUndefined,
@@ -393,11 +394,12 @@ export class WebsocketConnection {
    */
   private async getSessionTokens(): Promise<Array<string>> {
     const hostAuthToken = await this.args.claimHostAuthToken()
+    const xsrfCookie = getCookie("_streamlit_xsrf")
     this.args.resetHostAuthToken()
     return [
       // NOTE: We have to set the auth token to some arbitrary placeholder if
       // not provided since the empty string is an invalid protocol option.
-      hostAuthToken ?? "PLACEHOLDER_AUTH_TOKEN",
+      hostAuthToken ?? xsrfCookie ?? "PLACEHOLDER_AUTH_TOKEN",
       ...(this.args.sessionInfo.last?.sessionId
         ? [this.args.sessionInfo.last?.sessionId]
         : []),

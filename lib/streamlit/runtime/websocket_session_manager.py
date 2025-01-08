@@ -63,7 +63,7 @@ class WebsocketSessionManager(SessionManager):
         self,
         client: SessionClient,
         script_data: ScriptData,
-        user_info: dict[str, str | None],
+        user_info: dict[str, str | bool | None],
         existing_session_id: str | None = None,
         session_id_override: str | None = None,
     ) -> str:

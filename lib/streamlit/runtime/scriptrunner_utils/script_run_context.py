@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from streamlit.runtime.uploaded_file_manager import UploadedFileManager
 _LOGGER: Final = get_logger(__name__)
 
-UserInfo: TypeAlias = Dict[str, Union[str, None]]
+UserInfo: TypeAlias = Dict[str, Union[str, bool, None]]
 
 
 # If true, it indicates that we are in a cached function that disallows the usage of

@@ -179,6 +179,10 @@ export type IGuestToHostMessage =
       scriptRunState: ScriptRunState
     }
   | {
+      type: "REDIRECT_TO_URL"
+      url: string
+    }
+  | {
       type: "CUSTOM_PARENT_MESSAGE"
       message: string
     }
