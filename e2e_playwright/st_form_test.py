@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 from playwright.sync_api import Page, expect
 
 from e2e_playwright.conftest import ImageCompareFunction, wait_for_app_run
@@ -22,6 +23,7 @@ from e2e_playwright.shared.app_utils import (
 )
 
 
+@pytest.mark.performance
 def test_form_input_performance(app: Page):
     """
     Tests the re-render performance when typing in an input that is in a form.

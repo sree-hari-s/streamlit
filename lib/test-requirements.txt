@@ -31,4 +31,4 @@ pixelmatch>=0.3.0
 pytest-xdist
 pytest-rerunfailures
 pytest-github-actions-annotate-failures
-
+pytest-repeat==0.9.3
