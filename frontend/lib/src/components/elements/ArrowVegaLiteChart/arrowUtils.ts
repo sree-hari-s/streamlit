@@ -16,7 +16,7 @@
 
 import {
   getTypeName,
-  IndexTypeName,
+  PandasIndexTypeName,
 } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
 import { isNullOrUndefined } from "@streamlit/lib/src/util/utils"
@@ -27,11 +27,11 @@ const MagicFields = {
 
 /** Types of dataframe-indices that are supported as x axis. */
 const SUPPORTED_INDEX_TYPES = new Set([
-  IndexTypeName.DatetimeIndex,
-  IndexTypeName.Float64Index,
-  IndexTypeName.Int64Index,
-  IndexTypeName.RangeIndex,
-  IndexTypeName.UInt64Index,
+  PandasIndexTypeName.DatetimeIndex,
+  PandasIndexTypeName.Float64Index,
+  PandasIndexTypeName.Int64Index,
+  PandasIndexTypeName.RangeIndex,
+  PandasIndexTypeName.UInt64Index,
 ])
 
 /** All of the data that makes up a VegaLite chart. */
@@ -149,9 +149,9 @@ export function getDataArray(
   const dataArr = []
   const { dataRows: rows, dataColumns: cols } = quiverData.dimensions
 
-  const indexType = getTypeName(quiverData.types.index[0])
+  const indexType = getTypeName(quiverData.columnTypes.index[0])
   const hasSupportedIndex = SUPPORTED_INDEX_TYPES.has(
-    indexType as IndexTypeName
+    indexType as PandasIndexTypeName
   )
 
   for (let rowIndex = startIndex; rowIndex < rows; rowIndex++) {
@@ -166,7 +166,7 @@ export function getDataArray(
 
     for (let colIndex = 0; colIndex < cols; colIndex++) {
       const dataValue = quiverData.getDataValue(rowIndex, colIndex)
-      const dataType = quiverData.types.data[colIndex]
+      const dataType = quiverData.columnTypes.data[colIndex]
       const typeName = getTypeName(dataType)
 
       if (
@@ -178,11 +178,11 @@ export function getDataArray(
         // Vega JS assumes dates in the local timezone, so we need to convert
         // UTC date to be the same date in the local timezone.
         const offset = new Date(dataValue).getTimezoneOffset() * 60 * 1000 // minutes to milliseconds
-        row[quiverData.columns[0][colIndex]] = dataValue.valueOf() + offset
+        row[quiverData.columnNames[0][colIndex]] = dataValue.valueOf() + offset
       } else if (typeof dataValue === "bigint") {
-        row[quiverData.columns[0][colIndex]] = Number(dataValue)
+        row[quiverData.columnNames[0][colIndex]] = Number(dataValue)
       } else {
-        row[quiverData.columns[0][colIndex]] = dataValue
+        row[quiverData.columnNames[0][colIndex]] = dataValue
       }
     }
     dataArr.push(row)
