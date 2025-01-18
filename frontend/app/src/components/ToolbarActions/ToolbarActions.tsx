@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,12 @@ import {
   IGuestToHostMessage,
   IToolbarItem,
 } from "@streamlit/lib"
+import { MetricsManager } from "@streamlit/app/src/MetricsManager"
+
 import {
   StyledActionButtonContainer,
   StyledActionButtonIcon,
+  StyledToolbarActions,
 } from "./styled-components"
 
 export interface ActionButtonProps {
@@ -39,11 +42,18 @@ export function ActionButton({
   onClick,
 }: ActionButtonProps): ReactElement {
   return (
-    <div className="stActionButton">
+    <div className="stToolbarActionButton" data-testid="stToolbarActionButton">
       <BaseButton onClick={onClick} kind={BaseButtonKind.HEADER_BUTTON}>
         <StyledActionButtonContainer>
-          {icon && <StyledActionButtonIcon icon={icon} />}
-          {label && <span>{label}</span>}
+          {icon && (
+            <StyledActionButtonIcon
+              data-testid="stToolbarActionButtonIcon"
+              icon={icon}
+            />
+          )}
+          {label && (
+            <span data-testid="stToolbarActionButtonLabel">{label}</span>
+          )}
         </StyledActionButtonContainer>
       </BaseButton>
     </div>
@@ -53,28 +63,36 @@ export function ActionButton({
 export interface ToolbarActionsProps {
   sendMessageToHost: (message: IGuestToHostMessage) => void
   hostToolbarItems: IToolbarItem[]
+  metricsMgr: MetricsManager
 }
 
 function ToolbarActions({
   sendMessageToHost,
   hostToolbarItems,
+  metricsMgr,
 }: ToolbarActionsProps): ReactElement {
   return (
-    <>
+    <StyledToolbarActions
+      className="stToolbarActions"
+      data-testid="stToolbarActions"
+    >
       {hostToolbarItems.map(({ key, label, icon }) => (
         <ActionButton
           key={key}
           label={label}
           icon={icon}
-          onClick={() =>
+          onClick={() => {
+            metricsMgr.enqueue("menuClick", {
+              label: key,
+            })
             sendMessageToHost({
               type: "TOOLBAR_ITEM_CALLBACK",
               key,
             })
-          }
+          }}
         />
       ))}
-    </>
+    </StyledToolbarActions>
   )
 }
 

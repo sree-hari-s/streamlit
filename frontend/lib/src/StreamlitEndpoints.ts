@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,13 @@
  */
 
 import { CancelToken } from "axios"
+
 import { IAppPage } from "./proto"
+
+export type FileUploadClientConfig = {
+  prefix: string
+  headers: Record<string, string>
+}
 
 /** Exposes non-websocket endpoints used by the frontend. */
 export interface StreamlitEndpoints {
@@ -48,11 +54,7 @@ export interface StreamlitEndpoints {
    * @param page the page's AppPage protobuf properties
    * @param pageIndex the page's zero-based index
    */
-  buildAppPageURL(
-    pageLinkBaseURL: string | undefined,
-    page: IAppPage,
-    pageIndex: number
-  ): string
+  buildAppPageURL(pageLinkBaseURL: string | undefined, page: IAppPage): string
 
   /**
    * Upload a file to the FileUploader endpoint.
@@ -94,4 +96,10 @@ export interface StreamlitEndpoints {
    * from the server. Callers can use `ForwardMsg.decode` to deserialize the data.
    */
   fetchCachedForwardMsg(hash: string): Promise<Uint8Array>
+
+  /**
+   * setFileUploadClientConfig.
+   * @param config the object that contains prefix and headers object
+   */
+  setFileUploadClientConfig?(config: FileUploadClientConfig): void
 }

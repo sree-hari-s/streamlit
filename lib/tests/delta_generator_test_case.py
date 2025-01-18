@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,29 +14,36 @@
 
 """Base class for DeltaGenerator-related unit tests."""
 
+from __future__ import annotations
+
 import threading
 import unittest
-from typing import List
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-from streamlit.proto.Delta_pb2 import Delta
-from streamlit.proto.ForwardMsg_pb2 import ForwardMsg
 from streamlit.runtime import Runtime
 from streamlit.runtime.caching.storage.dummy_cache_storage import (
     MemoryCacheStorageManager,
 )
 from streamlit.runtime.forward_msg_queue import ForwardMsgQueue
+from streamlit.runtime.fragment import MemoryFragmentStorage
 from streamlit.runtime.media_file_manager import MediaFileManager
 from streamlit.runtime.memory_media_file_storage import MemoryMediaFileStorage
 from streamlit.runtime.memory_uploaded_file_manager import MemoryUploadedFileManager
+from streamlit.runtime.pages_manager import PagesManager
 from streamlit.runtime.scriptrunner import (
     ScriptRunContext,
     add_script_run_ctx,
     get_script_run_ctx,
 )
-from streamlit.runtime.scriptrunner.script_requests import ScriptRequests
+from streamlit.runtime.scriptrunner_utils.script_requests import ScriptRequests
+from streamlit.runtime.session_manager import SessionManager
 from streamlit.runtime.state import SafeSessionState, SessionState
 from streamlit.web.server.server import MEDIA_ENDPOINT, UPLOAD_FILE_ENDPOINT
+
+if TYPE_CHECKING:
+    from streamlit.proto.Delta_pb2 import Delta
+    from streamlit.proto.ForwardMsg_pb2 import ForwardMsg
 
 
 class DeltaGeneratorTestCase(unittest.TestCase):
@@ -51,11 +58,13 @@ class DeltaGeneratorTestCase(unittest.TestCase):
             session_id="test session id",
             _enqueue=self.forward_msg_queue.enqueue,
             query_string="",
-            session_state=SafeSessionState(SessionState()),
+            session_state=SafeSessionState(SessionState(), lambda: None),
             uploaded_file_mgr=MemoryUploadedFileManager(UPLOAD_FILE_ENDPOINT),
-            page_script_hash="",
-            user_info={"email": "test@test.com"},
+            main_script_path="",
+            user_info={"email": "test@example.com"},
             script_requests=ScriptRequests(),
+            fragment_storage=MemoryFragmentStorage(),
+            pages_manager=PagesManager(""),
         )
         add_script_run_ctx(threading.current_thread(), self.script_run_ctx)
 
@@ -67,6 +76,7 @@ class DeltaGeneratorTestCase(unittest.TestCase):
         mock_runtime.cache_storage_manager = MemoryCacheStorageManager()
         mock_runtime.media_file_mgr = MediaFileManager(self.media_file_storage)
         mock_runtime.uploaded_file_mgr = self.script_run_ctx.uploaded_file_mgr
+        mock_runtime._session_mgr = MagicMock(spec=SessionManager)
         Runtime._instance = mock_runtime
 
     def tearDown(self):
@@ -83,7 +93,7 @@ class DeltaGeneratorTestCase(unittest.TestCase):
         deltas = self.get_all_deltas_from_queue()
         return deltas[index]
 
-    def get_all_deltas_from_queue(self) -> List[Delta]:
+    def get_all_deltas_from_queue(self) -> list[Delta]:
         """Return all the delta messages in our ForwardMsgQueue"""
         return [
             msg.delta for msg in self.forward_msg_queue._queue if msg.HasField("delta")

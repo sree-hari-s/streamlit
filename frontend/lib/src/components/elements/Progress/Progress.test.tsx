@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,12 @@
  */
 
 import React from "react"
-import { shallow } from "@streamlit/lib/src/test_util"
 
+import { screen } from "@testing-library/react"
+
+import { render } from "@streamlit/lib/src/test_util"
 import { Progress as ProgressProto } from "@streamlit/lib/src/proto"
+
 import Progress, { ProgressProps } from "./Progress"
 
 const getProps = (
@@ -30,17 +33,22 @@ const getProps = (
   ...propOverrides,
 })
 
-describe("ProgressBar component", () => {
+describe("Progress component", () => {
   it("renders without crashing", () => {
-    const wrapper = shallow(<Progress {...getProps()} />)
+    render(<Progress {...getProps()} />)
 
-    expect(wrapper.find("ProgressBar").length).toBe(1)
+    const progressElement = screen.getByTestId("stProgress")
+    expect(progressElement).toBeInTheDocument()
+    expect(progressElement).toHaveClass("stProgress")
   })
 
-  it("sets the value and width correctly", () => {
-    const wrapper = shallow(<Progress {...getProps({ width: 100 })} />)
+  it("sets the value correctly", () => {
+    render(<Progress {...getProps({ width: 100 })} />)
 
-    expect(wrapper.find("ProgressBar").prop("value")).toEqual(50)
-    expect(wrapper.find("ProgressBar").prop("width")).toEqual(100)
+    expect(screen.getByTestId("stProgress")).toBeInTheDocument()
+    expect(screen.getByRole("progressbar")).toHaveAttribute(
+      "aria-valuenow",
+      "50"
+    )
   })
 })

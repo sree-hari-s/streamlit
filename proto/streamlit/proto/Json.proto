@@ -1,5 +1,5 @@
 /**!
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,15 @@
 
 syntax = "proto3";
 
+option java_package = "com.snowflake.apps.streamlit";
+option java_outer_classname = "JsonProto";
+
 message Json {
   // Content to display.
   string body = 1;
-
+  // Controls the initial expansion state of the json element.
+  // Is superseded by max_expand_depth if provided.
   bool expanded = 2;
+  // The maximum depth to expand the JSON object.
+  optional int32 max_expand_depth = 3;
 }

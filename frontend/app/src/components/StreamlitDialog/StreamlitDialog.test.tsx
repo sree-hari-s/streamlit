@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,12 @@
  */
 
 import React, { Fragment } from "react"
-import { Modal, mount, SessionInfo, mockSessionInfo } from "@streamlit/lib"
-import { StreamlitDialog, DialogType } from "./StreamlitDialog"
+
+import { screen } from "@testing-library/react"
+
+import { mockSessionInfo, render, SessionInfo } from "@streamlit/lib"
+
+import { DialogType, StreamlitDialog } from "./StreamlitDialog"
 
 function flushPromises(): Promise<void> {
   return new Promise(process.nextTick)
@@ -24,7 +28,7 @@ function flushPromises(): Promise<void> {
 
 describe("StreamlitDialog", () => {
   it("renders clear cache dialog and focuses clear cache button", async () => {
-    const wrapper = mount(
+    render(
       <Fragment>
         {StreamlitDialog({
           type: DialogType.CLEAR_CACHE,
@@ -38,13 +42,14 @@ describe("StreamlitDialog", () => {
     // Flush promises to give componentDidMount() a chance to run.
     await flushPromises()
 
-    setTimeout(() => {
-      expect(wrapper.find("button").at(1).is(":focus")).toBe(true)
-    }, 0)
+    const buttons = await screen.findAllByRole("button")
+    const targetButton = buttons[1]
+    expect(targetButton).toHaveTextContent("Clear caches")
+    expect(targetButton).toHaveFocus()
   })
 
   it("renders secondary dialog buttons properly", async () => {
-    const wrapper = mount(
+    render(
       <Fragment>
         {StreamlitDialog({
           type: DialogType.CLEAR_CACHE,
@@ -55,11 +60,14 @@ describe("StreamlitDialog", () => {
       </Fragment>
     )
 
-    expect(wrapper.find("StyledSecondaryButton")).toMatchSnapshot()
+    const baseButtonSecondary = await screen.findByTestId(
+      "stBaseButton-secondary"
+    )
+    expect(baseButtonSecondary).toBeDefined()
   })
 
   it("renders tertiary dialog buttons properly", async () => {
-    const wrapper = mount(
+    render(
       <Fragment>
         {StreamlitDialog({
           type: DialogType.CLEAR_CACHE,
@@ -70,13 +78,14 @@ describe("StreamlitDialog", () => {
       </Fragment>
     )
 
-    expect(wrapper.find("StyledTertiaryButton")).toMatchSnapshot()
+    const baseButtonGhost = await screen.findByTestId("stBaseButton-ghost")
+    expect(baseButtonGhost).toBeDefined()
   })
 })
 
 describe("aboutDialog", () => {
   it("shows version string if SessionInfo is initialized", async () => {
-    const wrapper = mount(
+    render(
       <Fragment>
         {StreamlitDialog({
           type: DialogType.ABOUT,
@@ -86,14 +95,18 @@ describe("aboutDialog", () => {
       </Fragment>
     )
 
-    expect(wrapper.find(Modal).text()).toContain("Streamlit v42.42.42")
+    expect(screen.getByTestId("stDialog")).toBeInTheDocument()
+    // need a regex because there is a line break
+    const versionRegex = /Streamlit v\s*42\.42\.42/
+    const versionText = screen.getByText(versionRegex)
+    expect(versionText).toBeDefined()
   })
 
   it("shows no version string if SessionInfo is not initialized", async () => {
     const sessionInfo = new SessionInfo()
     expect(sessionInfo.isSet).toBe(false)
 
-    const wrapper = mount(
+    render(
       <Fragment>
         {StreamlitDialog({
           type: DialogType.ABOUT,
@@ -102,7 +115,11 @@ describe("aboutDialog", () => {
         })}
       </Fragment>
     )
-    expect(wrapper.find(Modal).exists()).toBe(true)
-    expect(wrapper.find(Modal).text()).not.toContain("Streamlit v")
+
+    expect(screen.getByTestId("stDialog")).toBeInTheDocument()
+    // regex that is anything after Streamlit v
+    const versionRegex = /^Streamlit v.*/
+    const nonExistentText = screen.queryByText(versionRegex)
+    expect(nonExistentText).not.toBeInTheDocument()
   })
 })

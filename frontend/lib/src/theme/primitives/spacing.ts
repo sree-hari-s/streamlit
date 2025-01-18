@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,7 @@
  * limitations under the License.
  */
 
-import { fontSizes } from "./typography"
-
 export const spacing = {
-  halfSmFont: `${fontSizes.smPx / 2}px`,
-  twoThirdsSmFont: `${(fontSizes.smPx * 2) / 3}px`,
   px: "1px",
   none: "0",
   threeXS: "0.125rem",
@@ -31,15 +27,4 @@ export const spacing = {
   twoXL: "1.5rem",
   threeXL: "2rem",
   fourXL: "4rem",
-  nonePx: 0,
-  threeXSPx: 2,
-  twoXSPx: 4,
-  xsPx: 6,
-  smPx: 8,
-  mdPx: 12,
-  lgPx: 16,
-  xlPx: 20,
-  twoXLPx: 24,
-  threeXLPx: 32,
-  fourXLPx: 64,
 }

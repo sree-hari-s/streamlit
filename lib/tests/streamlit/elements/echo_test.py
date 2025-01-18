@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -36,9 +36,9 @@ class EchoTest(DeltaGeneratorTestCase):
             def foo(x):
                 y = x + 10
 
-                print(y)
+                st.write(y)
 
-            class MyClass(object):
+            class MyClass:
                 def do_x(self):
                     pass
 
@@ -52,9 +52,9 @@ class EchoTest(DeltaGeneratorTestCase):
 def foo(x):
     y = x + 10
 
-    print(y)
+    st.write(y)
 
-class MyClass(object):
+class MyClass:
     def do_x(self):
         pass
 
@@ -92,9 +92,9 @@ class MyClass(object):
             def foo(x):
                 y = x + 10
 
-                print(y)
+                st.write(y)
 
-            class MyClass(object):
+            class MyClass:
                 def do_x(self):
                     pass
 
@@ -107,9 +107,9 @@ class MyClass(object):
 def foo(x):
     y = x + 10
 
-    print(y)
+    st.write(y)
 
-class MyClass(object):
+class MyClass:
     def do_x(self):
         pass
 
@@ -122,8 +122,30 @@ class MyClass(object):
         self.assertEqual("Hello", element.markdown.body)
         self.clear_queue()
 
+    def test_if_elif_else(self):
+        page = "Dual"
+
+        if page == "Single":
+            with st.echo():
+                st.write("Single")
+
+        elif page == "Dual":
+            with st.echo():
+                st.write("Dual")
+
+        else:
+            with st.echo():
+                st.write("ELSE")
+
+        echo_str = 'st.write("Dual")'
+        element = self.get_delta_from_queue(0).new_element
+        self.assertEqual(echo_str, element.code.code_text)
+        element = self.get_delta_from_queue(1).new_element
+        self.assertEqual("Dual", element.markdown.body)
+        self.clear_queue()
+
     def test_root_level_echo(self):
-        import tests.streamlit.echo_test_data.root_level_echo
+        import tests.streamlit.echo_test_data.root_level_echo  # noqa: F401
 
         echo_str = "a = 123"
 
@@ -131,7 +153,7 @@ class MyClass(object):
         self.assertEqual(echo_str, element.code.code_text)
 
     def test_echo_multiline_param(self):
-        import tests.streamlit.echo_test_data.multiline_param_echo
+        import tests.streamlit.echo_test_data.multiline_param_echo  # noqa: F401
 
         echo_str = "a = 123"
 

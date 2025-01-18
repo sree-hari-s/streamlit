@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,25 +20,32 @@ interface StyledTooltipIconWrapperProps {
   isLatex?: boolean
 }
 
+interface StyledLabelHelpWrapperProps {
+  isLatex?: boolean
+}
+
 export const StyledTooltipIconWrapper =
   styled.div<StyledTooltipIconWrapperProps>(({ isLatex, theme }) => ({
     display: "flex",
     alignItems: "center",
-    marginTop: isLatex ? theme.spacing.mdPx : "0",
+    marginTop: isLatex ? theme.spacing.md : "0",
 
-    svg: {
+    "& .stTooltipHoverTarget > svg": {
       stroke: theme.colors.fadedText60,
       strokeWidth: 2.25,
     },
   }))
 
-export const StyledLabelHelpWrapper = styled.div(() => ({
-  display: "flex",
-  visibility: "visible",
-  verticalAlign: "middle",
-  flexDirection: "row",
-  alignItems: "center",
-}))
+export const StyledLabelHelpWrapper = styled.div<StyledLabelHelpWrapperProps>(
+  ({ isLatex }) => ({
+    display: "flex",
+    visibility: "visible",
+    verticalAlign: "middle",
+    flexDirection: "row",
+    alignItems: "center",
+    ...(isLatex ? { justifyContent: "center" } : {}),
+  })
+)
 
 export const StyledLabelHelpInline = styled.label(({ theme }) => ({
   marginLeft: theme.spacing.xs,

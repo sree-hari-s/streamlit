@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,25 +14,20 @@
  * limitations under the License.
  */
 import styled from "@emotion/styled"
-import { ChatInput as ChatInputProto } from "@streamlit/lib/src/proto"
+
 import { hasLightBackgroundColor } from "@streamlit/lib/src/theme"
 
 export interface StyledChatInputContainerProps {
   width: number
-  position: ChatInputProto.Position
 }
 
 export const StyledChatInputContainer =
-  styled.div<StyledChatInputContainerProps>(({ theme, width, position }) => {
-    const lightTheme = hasLightBackgroundColor(theme)
+  styled.div<StyledChatInputContainerProps>(({ theme, width }) => {
     return {
-      borderRadius: theme.radii.lg,
+      borderRadius: theme.radii.xxxl,
       display: "flex",
-      ...(position === ChatInputProto.Position.BOTTOM && {
-        backgroundColor: lightTheme
-          ? theme.colors.gray20
-          : theme.colors.gray90,
-      }),
+      backgroundColor:
+        theme.colors.widgetBackgroundColor ?? theme.colors.secondaryBg,
       width: `${width}px`,
     }
   })
@@ -42,7 +37,7 @@ export const StyledChatInput = styled.div(({ theme }) => {
     backgroundColor: theme.colors.transparent,
     position: "relative",
     flexGrow: 1,
-    borderRadius: theme.radii.lg,
+    borderRadius: theme.radii.xxxl,
     display: "flex",
     alignItems: "center",
   }
@@ -62,14 +57,14 @@ export const StyledSendIconButton = styled.button<StyledSendIconButtonProps>(
     return {
       border: "none",
       backgroundColor: theme.colors.transparent,
-      borderTopRightRadius: extended ? theme.radii.none : theme.radii.lg,
-      borderTopLeftRadius: extended ? theme.radii.lg : theme.radii.none,
-      borderBottomRightRadius: theme.radii.lg,
+      borderTopRightRadius: extended ? "0" : theme.radii.xxxl,
+      borderTopLeftRadius: extended ? theme.radii.default : "0",
+      borderBottomRightRadius: theme.radii.xxxl,
       display: "inline-flex",
       alignItems: "center",
       justifyContent: "center",
-      lineHeight: 1,
-      margin: 0,
+      lineHeight: theme.lineHeights.none,
+      margin: theme.spacing.none,
       padding: theme.spacing.sm,
       color: disabled ? cleanIconColor : dirtyIconColor,
       pointerEvents: "auto",
@@ -85,8 +80,7 @@ export const StyledSendIconButton = styled.button<StyledSendIconButtonProps>(
           : theme.colors.gray90,
       },
       "&:hover": {
-        backgroundColor: theme.colors.primary,
-        color: theme.colors.white,
+        color: theme.colors.primary,
       },
       "&:disabled, &:disabled:hover, &:disabled:active": {
         backgroundColor: theme.colors.transparent,
@@ -97,33 +91,19 @@ export const StyledSendIconButton = styled.button<StyledSendIconButtonProps>(
   }
 )
 
-export const StyledFloatingChatInputContainer = styled.div(({ theme }) => ({
-  position: "fixed",
-  bottom: "0px",
-  paddingBottom: "70px",
-  paddingTop: theme.spacing.lg,
-  backgroundColor: theme.colors.bgColor,
-  zIndex: theme.zIndices.chatInput,
-  [`@media (max-width: ${theme.breakpoints.md})`]: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    left: 0,
-    width: "100vw",
-  },
-}))
-
-export const StyledSendIconButtonContainer = styled.div(() => ({
+export const StyledSendIconButtonContainer = styled.div({
   display: "flex",
   alignItems: "flex-end",
   height: "100%",
   position: "absolute",
-  right: "0px",
+  right: 0,
   pointerEvents: "none",
-}))
+})
 
-export const StyledInputInstructionsContainer = styled.div({
+export const StyledInputInstructionsContainer = styled.div(({ theme }) => ({
   position: "absolute",
   bottom: "0px",
-  right: "3rem",
-})
+  // Calculate the right padding to account for the send icon (iconSizes.xl + 2 * spacing.sm)
+  // and some additional margin between the icon and the text (spacing.sm).
+  right: `calc(${theme.iconSizes.xl} + 2 * ${theme.spacing.sm} + ${theme.spacing.sm})`,
+}))

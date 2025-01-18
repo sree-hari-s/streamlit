@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Unit test of dg._arrow_add_rows()."""
+"""Unit test of dg.add_rows()."""
 
 import pandas as pd
 from parameterized import parameterized
 
 import streamlit as st
-from streamlit.type_util import bytes_to_data_frame
+from streamlit.dataframe_util import convert_arrow_bytes_to_pandas_df
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
 
 DATAFRAME = pd.DataFrame({"a": [10], "b": [20], "c": [30]})
@@ -30,15 +30,15 @@ NEW_ROWS2 = pd.DataFrame(
 )
 
 ST_CHART_ARGS = [
-    st._arrow_area_chart,
-    st._arrow_bar_chart,
-    st._arrow_line_chart,
-    st._arrow_scatter_chart,
+    st.area_chart,
+    st.bar_chart,
+    st.line_chart,
+    st.scatter_chart,
 ]
 
 
 class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
-    """Test dg._arrow_add_rows."""
+    """Test dg.add_rows."""
 
     @parameterized.expand(ST_CHART_ARGS)
     def test_charts_with_implict_x_and_y(self, chart_command):
@@ -61,9 +61,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         )
 
         element = chart_command(DATAFRAME)
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -80,9 +80,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         expected.index = pd.RangeIndex(1, 4)
 
         element = chart_command(DATAFRAME, x="b", y="c")
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -98,9 +98,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         )
 
         element = chart_command(DATAFRAME, y="b")
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -117,9 +117,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         )
 
         element = chart_command(DATAFRAME, x="b")
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -136,9 +136,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         )
 
         element = chart_command(DATAFRAME, x="b", y=["a", "c"])
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -157,9 +157,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         )
 
         element = chart_command(DATAFRAME, x="b", y=["a", "c"], color=["#f00", "#0f0"])
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -175,10 +175,10 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
             }
         )
 
-        element = st._arrow_scatter_chart(DATAFRAME2, x="b", y=["a", "c"], size="d")
-        element._arrow_add_rows(NEW_ROWS2)
+        element = st.scatter_chart(DATAFRAME2, x="b", y=["a", "c"], size="d")
+        element.add_rows(NEW_ROWS2)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 
@@ -195,9 +195,9 @@ class DeltaGeneratorAddRowsTest(DeltaGeneratorTestCase):
         expected.index = pd.RangeIndex(start=1, stop=4, step=1)
 
         element = chart_command(DATAFRAME, x="b", y="a")
-        element._arrow_add_rows(NEW_ROWS)
+        element.add_rows(NEW_ROWS)
 
-        proto = bytes_to_data_frame(
+        proto = convert_arrow_bytes_to_pandas_df(
             self.get_delta_from_queue().arrow_add_rows.data.data
         )
 

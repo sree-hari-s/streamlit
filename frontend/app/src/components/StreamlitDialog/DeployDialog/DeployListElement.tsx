@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
  */
 
 import React, { ReactElement } from "react"
-import { StyledElement } from "./styled-components"
+
 import Checkmark from "@streamlit/app/src/assets/svg/checkmark.svg"
+
+import { StyledElement } from "./styled-components"
 
 export interface IDeployListElementProps {
   children?: React.ReactNode
@@ -24,9 +26,9 @@ export interface IDeployListElementProps {
 }
 
 function DeployListElement(props: IDeployListElementProps): ReactElement {
-  const { children, extraSpacing } = props
+  const { children } = props
   return (
-    <StyledElement extraSpacing={extraSpacing}>
+    <StyledElement>
       <img src={Checkmark} alt={"Checkmark"} />
       <span>{children}</span>
     </StyledElement>

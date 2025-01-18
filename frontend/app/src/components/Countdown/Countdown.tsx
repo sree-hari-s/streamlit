@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import React, { PureComponent, ReactNode } from "react"
+import React, { useState } from "react"
+
 import { StyledCountdown } from "./styled-components"
 
 interface Props {
@@ -22,28 +23,14 @@ interface Props {
   endCallback: () => void
 }
 
-interface State {
-  countdown: number
-}
+const Countdown: React.FC<Props> = ({ countdown, endCallback }) => {
+  const [currentCountdown, setCurrentCountdown] = useState(countdown)
 
-class Countdown extends PureComponent<Props, State> {
-  public static defaultProps: Partial<Props> = {
-    endCallback: () => {},
-  }
-
-  state = {
-    countdown: this.props.countdown,
-  }
-
-  onAnimationEnd = async (): Promise<any> => {
-    const { countdown } = this.state
-    const { endCallback } = this.props
-    const newCountdown = countdown - 1
+  const onAnimationEnd = (): void => {
+    const newCountdown = currentCountdown - 1
 
     if (newCountdown >= 0) {
-      this.setState({
-        countdown: newCountdown,
-      })
+      setCurrentCountdown(newCountdown)
     }
 
     if (newCountdown === 0) {
@@ -51,19 +38,16 @@ class Countdown extends PureComponent<Props, State> {
     }
   }
 
-  render(): ReactNode {
-    const { countdown }: State = this.state
-
-    return (
-      <StyledCountdown
-        onAnimationEnd={this.onAnimationEnd}
-        key={`frame${countdown}`}
-      >
-        {/* The key forces DOM mutations, for animation to restart. */}
-        <span>{countdown}</span>
-      </StyledCountdown>
-    )
-  }
+  return (
+    <StyledCountdown
+      data-testid="stCountdown"
+      onAnimationEnd={onAnimationEnd}
+      key={`frame${currentCountdown}`}
+    >
+      {/* The key forces DOM mutations, for animation to restart. */}
+      <span>{currentCountdown}</span>
+    </StyledCountdown>
+  )
 }
 
 export default Countdown

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-import { Video } from "@emotion-icons/open-iconic"
-import { useTheme } from "@emotion/react"
 import React, {
   ReactElement,
   useCallback,
@@ -23,10 +21,13 @@ import React, {
   useRef,
   useState,
 } from "react"
+
+import { Video } from "@emotion-icons/open-iconic"
+import { useTheme } from "@emotion/react"
 import { isMobile } from "react-device-detect"
 import Webcam from "react-webcam"
-import { debounce } from "@streamlit/lib/src/util/utils"
 
+import { debounce } from "@streamlit/lib/src/util/utils"
 import Icon from "@streamlit/lib/src/components/shared/Icon"
 import { EmotionTheme } from "@streamlit/lib/src/theme"
 import themeColors from "@streamlit/lib/src/theme/emotionBaseTheme/themeColors"
@@ -49,6 +50,8 @@ export interface Props {
   setClearPhotoInProgress: (clearPhotoInProgress: boolean) => void
   facingMode: FacingMode
   setFacingMode: () => void
+  // Allow for unit testing
+  testOverride?: WebcamPermission
 }
 
 export enum WebcamPermission {
@@ -89,14 +92,17 @@ const WebcamComponent = ({
   setClearPhotoInProgress,
   facingMode,
   setFacingMode,
+  testOverride,
 }: Props): ReactElement => {
   const [webcamPermission, setWebcamPermissionState] = useState(
-    WebcamPermission.PENDING
+    testOverride || WebcamPermission.PENDING
   )
   const videoRef = useRef<Webcam>(null)
 
   const [debouncedWidth, setDebouncedWidth] = useState(width)
 
+  // TODO: Update to match React best practices
+  // eslint-disable-next-line react-compiler/react-compiler
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const memoizedSetDebouncedCallback = useCallback(
     debounce(1000, setDebouncedWidth),
@@ -117,7 +123,7 @@ const WebcamComponent = ({
   const theme: EmotionTheme = useTheme()
 
   return (
-    <StyledCameraInput width={debouncedWidth}>
+    <StyledCameraInput data-testid="stCameraInputWebcamComponent">
       {webcamPermission !== WebcamPermission.SUCCESS &&
       !disabled &&
       !clearPhotoInProgress ? (
@@ -126,6 +132,7 @@ const WebcamComponent = ({
         isMobile && <SwitchFacingModeButton switchFacingMode={setFacingMode} />
       )}
       <StyledBox
+        data-testid="stCameraInputWebcamStyledBox"
         hidden={
           webcamPermission !== WebcamPermission.SUCCESS &&
           !disabled &&
@@ -144,7 +151,7 @@ const WebcamComponent = ({
             // The aspect ration of video stream may be different depending on a camera.
             height={(debouncedWidth * 9) / 16}
             style={{
-              borderRadius: `${theme.radii.lg} ${theme.radii.lg} 0 0`,
+              borderRadius: `${theme.radii.default} ${theme.radii.default} 0 0`,
             }}
             onUserMediaError={() => {
               setWebcamPermissionState(WebcamPermission.ERROR)

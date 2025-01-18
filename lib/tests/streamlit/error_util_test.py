@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import contextlib
 import io
 import unittest
@@ -22,30 +24,6 @@ from tests import testutil
 
 
 class ErrorUtilTest(unittest.TestCase):
-    @patch("streamlit.exception")
-    @patch("streamlit.error")
-    def test_uncaught_exception_show_details(self, mock_st_error, mock_st_exception):
-        """If client.showErrorDetails is true, uncaught app errors print
-        to the frontend."""
-        with testutil.patch_config_options({"client.showErrorDetails": True}):
-            exc = RuntimeError("boom!")
-            handle_uncaught_app_exception(exc)
-
-            mock_st_error.assert_not_called()
-            mock_st_exception.assert_called_once_with(exc)
-
-    @patch("streamlit.exception")
-    @patch("streamlit.error")
-    def test_uncaught_exception_no_details(self, mock_st_error, mock_st_exception):
-        """If client.showErrorDetails is false, uncaught app errors are logged,
-        and a generic error message is printed to the frontend."""
-        with testutil.patch_config_options({"client.showErrorDetails": False}):
-            exc = RuntimeError("boom!")
-            handle_uncaught_app_exception(exc)
-
-            mock_st_error.assert_not_called()
-            mock_st_exception.assert_called_once()
-
     def test_handle_print_rich_exception(self):
         """Test if the print rich exception method is working fine."""
 
@@ -74,6 +52,7 @@ class ErrorUtilTest(unittest.TestCase):
                 assert "boom!" in captured_output
                 # Uncaught app exception is only used by the non-rich exception logging
                 assert "Uncaught app exception" not in captured_output
+
         with testutil.patch_config_options({"logger.enableRich": False}):
             with io.StringIO() as buf:
                 # Capture stdout logs
@@ -85,3 +64,15 @@ class ErrorUtilTest(unittest.TestCase):
                 # With rich deactivated, the exception is not logged to stdout
                 assert "Exception:" not in captured_output
                 assert "boom!" not in captured_output
+
+    def test_handle_uncaught_app_exception_with_rich_doesnt_call_logger(self):
+        """Test that if rich is enabled, the logger error is not used."""
+        with testutil.patch_config_options({"logger.enableRich": True}):
+            with patch("streamlit.error_util._LOGGER.error") as mock_logger:
+                handle_uncaught_app_exception(Exception("boom!"))
+                mock_logger.assert_not_called()
+
+        with testutil.patch_config_options({"logger.enableRich": False}):
+            with patch("streamlit.error_util._LOGGER.error") as mock_logger:
+                handle_uncaught_app_exception(Exception("boom!"))
+                mock_logger.assert_called_once()

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,9 @@ import styled from "@emotion/styled"
 
 export interface StyledStreamlitMarkdownProps {
   isCaption: boolean
-  isInSidebar: boolean
+  isInSidebarOrDialog: boolean
   isLabel?: boolean
+  boldLabel?: boolean
   largerLabel?: boolean
   isToast?: boolean
 }
@@ -33,130 +34,248 @@ function sharedMarkdownStyle(theme: Theme): any {
   return {
     a: {
       color: theme.colors.linkText,
+      textDecoration: "underline",
+    },
+  }
+}
+
+/**
+ * Caption sizes taken from default styles, but using em instead of rem, so it
+ * inherits the <small>'s shrunk size
+ *
+ */
+function convertFontSizes(
+  fontSize: string,
+  smallFontSize: string,
+  captionFontSize: string,
+  smallCaptionFontSize: string,
+  useSmallerHeadings: boolean,
+  isCaption: boolean
+): string {
+  if (useSmallerHeadings) {
+    return isCaption ? convertRemToEm(smallCaptionFontSize) : smallFontSize
+  }
+
+  return isCaption ? convertRemToEm(captionFontSize) : fontSize
+}
+
+function getMarkdownHeadingDefinitions(
+  theme: Theme,
+  useSmallerHeadings: boolean,
+  isCaption: boolean
+): any {
+  return {
+    "h1, h2, h3, h4, h5, h6": {
+      fontFamily: theme.genericFonts.headingFont,
+      fontWeight: theme.fontWeights.bold,
+      lineHeight: theme.lineHeights.headings,
+      margin: 0,
+      color: "inherit",
+    },
+    h1: {
+      fontSize: convertFontSizes(
+        theme.fontSizes.fourXL,
+        theme.fontSizes.xl,
+        theme.fontSizes.threeXL,
+        theme.fontSizes.xl,
+        useSmallerHeadings,
+        isCaption
+      ),
+      fontWeight: useSmallerHeadings
+        ? theme.fontWeights.bold
+        : theme.fontWeights.extrabold,
+      padding: `${theme.spacing.xl} 0 ${theme.spacing.lg} 0`,
+    },
+    "h1 b, h1 strong": {
+      fontWeight: theme.fontWeights.extrabold,
+    },
+    "h2, h3": {
+      letterSpacing: "-0.005em",
+    },
+    h2: {
+      fontSize: convertFontSizes(
+        theme.fontSizes.threeXL,
+        theme.fontSizes.lg,
+        theme.fontSizes.twoXL,
+        theme.fontSizes.lg,
+        useSmallerHeadings,
+        isCaption
+      ),
+      padding: `${theme.spacing.lg} 0 ${theme.spacing.lg} 0`,
+    },
+    h3: {
+      fontSize: convertFontSizes(
+        theme.fontSizes.twoXL,
+        theme.fontSizes.mdLg,
+        theme.fontSizes.lg,
+        theme.fontSizes.mdLg,
+        useSmallerHeadings,
+        isCaption
+      ),
+      padding: `${theme.spacing.sm} 0 ${theme.spacing.lg} 0`,
+    },
+    h4: {
+      fontSize: convertFontSizes(
+        theme.fontSizes.xl,
+        theme.fontSizes.md,
+        theme.fontSizes.md,
+        theme.fontSizes.md,
+        useSmallerHeadings,
+        isCaption
+      ),
+      padding: `${theme.spacing.md} 0 ${theme.spacing.lg} 0`,
+    },
+    h5: {
+      fontSize: convertFontSizes(
+        theme.fontSizes.lg,
+        theme.fontSizes.sm,
+        theme.fontSizes.md,
+        theme.fontSizes.md,
+        useSmallerHeadings,
+        isCaption
+      ),
+      padding: `0 0 ${theme.spacing.lg} 0`,
+    },
+    h6: {
+      fontSize: convertFontSizes(
+        theme.fontSizes.md,
+        theme.fontSizes.twoSm,
+        theme.fontSizes.md,
+        theme.fontSizes.md,
+        useSmallerHeadings,
+        isCaption
+      ),
+      padding: `0 0 ${theme.spacing.lg} 0`,
     },
   }
 }
 
 export const StyledStreamlitMarkdown =
   styled.div<StyledStreamlitMarkdownProps>(
-    ({ theme, isCaption, isInSidebar, isLabel, largerLabel, isToast }) => {
+    ({
+      theme,
+      isCaption,
+      isInSidebarOrDialog,
+      isLabel,
+      boldLabel,
+      largerLabel,
+      isToast,
+    }) => {
       // Widget Labels have smaller font size with exception of Button/Checkbox/Radio Button labels
       // Toasts also have smaller font size
-      const labelFontSize = (isLabel && !largerLabel) || isToast
+      const useSmallerFontSize =
+        (isLabel && !largerLabel) || isToast || isCaption
+
       return {
         fontFamily: theme.genericFonts.bodyFont,
+        fontSize: useSmallerFontSize ? theme.fontSizes.sm : theme.fontSizes.md,
         marginBottom: isLabel ? "" : `-${theme.spacing.lg}`,
+        opacity: isCaption ? 0.6 : undefined,
+        color: "inherit",
         ...sharedMarkdownStyle(theme),
+        ...getMarkdownHeadingDefinitions(
+          theme,
+          isInSidebarOrDialog,
+          isCaption
+        ),
 
         p: {
           wordBreak: "break-word",
-          marginBottom: isLabel ? 0 : "",
-          ...(labelFontSize ? { fontSize: theme.fontSizes.sm } : {}),
+          marginBottom: isLabel ? theme.spacing.none : "",
+          fontWeight: boldLabel ? theme.fontWeights.bold : "",
+          marginTop: theme.spacing.none,
+          marginLeft: theme.spacing.none,
+          marginRight: theme.spacing.none,
+        },
+
+        img: {
+          // Images in markdown should never be wider
+          // than the content area.
+          maxWidth: "100%",
+          // In labels, widgets should never be taller than the text.
+          maxHeight: isLabel ? "1em" : undefined,
+          verticalAlign: "middle",
         },
 
         li: {
+          // TODO(lukasmasuch): We might want to refactor
+          // these settings to use our spacing props instead.
+          // But this would require some styling changes.
           margin: "0.2em 0 0.2em 1.2em",
           padding: "0 0 0 0.6em",
-          fontSize: theme.fontSizes.md,
+        },
+
+        // Handles quotes:
+        blockquote: {
+          margin: "1em 0 1em 0",
+          padding: "0 0 0 1.2em",
+          borderLeft: `${theme.sizes.borderWidth} solid ${theme.colors.lightGray}`,
+        },
+
+        "b, strong": {
+          fontWeight: theme.fontWeights.bold,
+        },
+
+        // Handles the horizontal divider:
+        hr: {
+          margin: "2em 0",
+          padding: 0,
+          // Reset Firefox's gray color:
+          color: "inherit",
+          backgroundColor: "transparent",
+          border: "none",
+          borderBottom: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
+          // Set correct height and prevent the size attribute
+          // to make the hr look like an input field:
+          "&:not([size])": {
+            height: theme.sizes.borderWidth,
+          },
+        },
+
+        table: {
+          // Add some space below the markdown tables
+          marginBottom: theme.spacing.lg,
+          // Prevent double borders
+          borderCollapse: "collapse",
         },
 
         tr: {
-          borderTop: `1px solid ${theme.colors.fadedText10}`,
+          borderTop: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
+        },
+
+        th: {
+          textAlign: "inherit",
         },
 
         "th, td": {
-          padding: "6px 13px",
-          border: `1px solid ${theme.colors.fadedText10}`,
+          padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+          border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
         },
 
-        ...(isToast
-          ? {
-              div: {
-                display: "inline-flex",
-              },
-            }
-          : {}),
+        "span.has-background-color": {
+          padding: `${theme.spacing.threeXS} ${theme.spacing.twoXS}`,
+          margin: theme.spacing.none,
+          borderRadius: theme.radii.md,
+        },
 
-        ...(isCaption
-          ? {
-              color: isInSidebar
-                ? theme.colors.gray
-                : theme.colors.fadedText60,
-              fontSize: theme.fontSizes.sm,
-              "p, ol, ul, dl, li": {
-                fontSize: "inherit",
-              },
-
-              "h1, h2, h3, h4, h5, h6": {
-                color: "inherit",
-              },
-
-              // sizes taken from default styles, but using em instead of rem, so it
-              // inherits the <small>'s shrunk size
-              h1: {
-                fontSize: isInSidebar
-                  ? convertRemToEm(theme.fontSizes.xl)
-                  : "2.25em",
-              },
-              h2: {
-                fontSize: isInSidebar
-                  ? convertRemToEm(theme.fontSizes.lg)
-                  : "1.75em",
-              },
-              h3: {
-                fontSize: isInSidebar ? "1.125em" : "1.25em",
-              },
-
-              // these are normally shrunk further to 0.8rem, but since we're already
-              // inside a small, just make them 1em.
-              "h4, h5, h6": {
-                fontSize: "1em",
-              },
-            }
-          : {}),
+        "p, ol, ul, dl, li": {
+          fontSize: "inherit",
+        },
       }
     }
   )
 
-export const StyledLinkIconContainer = styled.div(() => ({
-  position: "relative",
-  left: "calc(-2.5rem - 0.5rem)",
-  width: "calc(100% + 2.5rem + 0.5rem)",
-  display: "flex",
-  alignItems: "center",
-  overflow: "visible",
-  ":hover": {
-    a: {
-      opacity: 1,
-      transform: "scale(1)",
-      transition: "none",
-    },
-  },
-}))
-
 export const StyledLinkIcon = styled.a(({ theme }) => ({
-  position: "absolute",
-  marginRight: "0.5rem",
-
   // center icon
   lineHeight: 0,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
 
-  // copied from full screen button
-  transform: "scale(0)",
-  transition: "opacity 300ms 150ms, transform 300ms 150ms",
-  opacity: 0,
-  height: "2.5rem",
-  width: "2.5rem",
-  zIndex: theme.zIndices.sidebar + 1,
-  border: "none",
-  backgroundColor: theme.colors.lightenedBg05,
-  borderRadius: "50%",
-
   svg: {
+    // same color as the tooltip-icon
     stroke: theme.colors.fadedText60,
+    strokeWidth: 2.25,
   },
 
   "&:hover svg": {
@@ -164,17 +283,41 @@ export const StyledLinkIcon = styled.a(({ theme }) => ({
   },
 }))
 
-export const StyledHeaderContainer = styled.div(({ theme }) => ({
+export const StyledHeadingWithActionElements = styled.div(({ theme }) => ({
   "h1, h2, h3, h4, h5, h6, span": {
-    scrollMarginTop: theme.spacing.threeXL,
+    scrollMarginTop: theme.sizes.headerHeight,
   },
   ...sharedMarkdownStyle(theme),
+
+  // break-word & pretty makes most headings break in a nicer way than break-all while still
+  // preventing overflowing of the container to the side. Long headings without whitespaces or hyphens might still look weird
+  wordBreak: "break-word",
+  textWrap: "pretty",
+
+  // show link-icon when hovering somewhere over the heading
+  [StyledLinkIcon as any]: {
+    visibility: "hidden",
+  },
+
+  // we have to set the hover here so that the link icon becomes visible when hovering anywhere over the heading
+  "&:hover": {
+    [StyledLinkIcon as any]: {
+      visibility: "visible",
+    },
+  },
 }))
 
-export const StyledHeaderContent = styled.span(() => ({
-  position: "relative",
-  flex: "1",
-  marginLeft: "calc(2.5rem + 0.5rem)",
+export const StyledHeadingActionElements = styled.span(({ theme }) => ({
+  marginLeft: theme.spacing.sm,
+  display: "inline-flex",
+  gap: theme.spacing.sm,
+
+  verticalAlign: "middle",
+
+  "& > *": {
+    // remove margins of inner elements as they are wrapped in a container that applies the margin
+    marginLeft: "0 !important",
+  },
 }))
 
 export interface StyledDividerProps {
@@ -182,16 +325,21 @@ export interface StyledDividerProps {
   color: string
 }
 
-export const StyledDivider = styled.hr<StyledDividerProps>(
-  ({ rainbow, color }) => {
+export const StyledHeaderDivider = styled.hr<StyledDividerProps>(
+  ({ theme, rainbow, color }) => {
     return {
       // Height needs to be !important due to globalStyles.tsx hr height override - line #170
-      height: "2px !important",
-      marginTop: "0.5rem",
-      marginBottom: "0px",
+      height: `${theme.spacing.threeXS} !important`,
+      marginTop: theme.spacing.sm,
+      marginBottom: theme.spacing.none,
       border: "none",
-      borderRadius: "3px",
+      borderRadius: theme.radii.full,
       ...(rainbow ? { background: color } : { backgroundColor: color }),
     }
   }
 )
+
+export const StyledPreWrapper = styled.div(({ theme }) => ({
+  // Set spacing between pre-elements inside of markdown similar to our gap spacing between elements
+  marginBottom: theme.spacing.lg,
+}))

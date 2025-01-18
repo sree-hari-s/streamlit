@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,196 +14,384 @@
  * limitations under the License.
  */
 
-import React from "react"
-import { mount } from "@streamlit/lib/src/test_util"
-import Plot from "react-plotly.js"
-
-import ThemeProvider from "@streamlit/lib/src/components/core/ThemeProvider"
 import { PlotlyChart as PlotlyChartProto } from "@streamlit/lib/src/proto"
+import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 import { mockTheme } from "@streamlit/lib/src/mocks/mockTheme"
-import mock from "./mock"
-import { DEFAULT_HEIGHT, PlotlyChartProps } from "./PlotlyChart"
 
-jest.mock("react-plotly.js", () => jest.fn(() => null))
+import { applyStreamlitTheme, layoutWithThemeDefaults } from "./CustomTheme"
+import {
+  applyTheming,
+  handleSelection,
+  parseBoxSelection,
+  parseLassoPath,
+  sendEmptySelection,
+} from "./PlotlyChart"
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { PlotlyChart } = require("./PlotlyChart")
+vi.mock("./CustomTheme", () => ({
+  replaceTemporaryColors: vi.fn().mockReturnValue("{}"),
+  applyStreamlitTheme: vi.fn(),
+  layoutWithThemeDefaults: vi.fn().mockReturnValue({}),
+}))
 
-const getProps = (
-  elementProps: Partial<PlotlyChartProto> = {}
-): PlotlyChartProps => ({
-  element: PlotlyChartProto.create({
-    ...mock,
-    ...elementProps,
-  }),
-  width: 0,
-  height: 0,
+/**
+ * PlotlyChart.test.tsx does not contain any React-testing-library tests because Plotly doesn't support it
+ * https://github.com/plotly/react-plotly.js/issues/176
+ */
+
+describe("parsePlotlySelections", () => {
+  describe("parseLassoPath", () => {
+    it("parses a simple lasso path string into x and y coordinates", () => {
+      const pathData = "M100,150L200,250L300,350Z"
+      const result = parseLassoPath(pathData)
+      expect(result).toEqual({
+        x: [100, 200, 300],
+        y: [150, 250, 350],
+      })
+    })
+
+    it("does not error with an empty string", () => {
+      const result = parseLassoPath("")
+      expect(result).toEqual({
+        x: [],
+        y: [],
+      })
+    })
+
+    it("handles path with only one point", () => {
+      const pathData = "M100,150Z"
+      const result = parseLassoPath(pathData)
+      expect(result).toEqual({
+        x: [100],
+        y: [150],
+      })
+    })
+  })
+
+  describe("parseBoxSelection", () => {
+    it("parses a box selection into x and y ranges", () => {
+      const selection = { x0: 100, y0: 150, x1: 200, y1: 250 }
+      const result = parseBoxSelection(selection)
+      expect(result).toEqual({
+        x: [100, 200],
+        y: [150, 250],
+      })
+    })
+
+    it("returns an object of empty x and y", () => {
+      const selection = {}
+      const result = parseBoxSelection(selection)
+      expect(result).toEqual({
+        x: [],
+        y: [],
+      })
+    })
+  })
 })
 
-function testEnterAndExitFullscreen(useContainerWidth: boolean): void {
-  const nonFullScreenProps = {
-    ...getProps({
-      useContainerWidth,
-    }),
-    height: undefined,
-  }
-  const wrapper = mount(<PlotlyChart {...nonFullScreenProps} />)
-
-  const initialHeight = wrapper.find(Plot).props().layout.height
-  const initialWidth = wrapper.find(Plot).props().layout.width
-
-  const fullScreenProps = {
-    ...getProps(),
-    height: 400,
-    width: 400,
-  }
-
-  wrapper.setProps(fullScreenProps)
-  wrapper.update()
-
-  wrapper.setProps(nonFullScreenProps)
-  wrapper.update()
-
-  expect(wrapper.find(Plot).props().layout.width).toEqual(initialWidth)
-  expect(wrapper.find(Plot).props().layout.height).toEqual(initialHeight)
-
-  // an explicit value because useContainerWidth is passed
-  if (useContainerWidth)
-    expect(wrapper.find(Plot).props().layout.width).not.toBeUndefined()
-  else expect(wrapper.find(Plot).props().layout.width).toBeUndefined()
-  // undefined because plotly will render its own default height
-  expect(wrapper.find(Plot).props().layout.height).toBeUndefined()
+const getWidgetMgr = (): WidgetStateManager => {
+  const sendRerunBackMsg = vi.fn()
+  const formsDataChanged = vi.fn()
+  return new WidgetStateManager({
+    sendRerunBackMsg,
+    formsDataChanged,
+  })
 }
 
-describe("PlotlyChart Element", () => {
-  it("renders without crashing", () => {
-    const props = getProps()
-    const wrapper = mount(<PlotlyChart {...props} />)
+describe("sendEmptySelection", () => {
+  it("sends a rerun msg if widget_state is empty", () => {
+    const widgetMgr = getWidgetMgr()
+    vi.spyOn(widgetMgr, "setStringValue")
 
-    expect(wrapper.find(Plot).length).toBe(1)
+    sendEmptySelection(
+      widgetMgr,
+      { id: "plotly_chart" } as PlotlyChartProto,
+      undefined
+    )
+
+    expect(widgetMgr.setStringValue).toHaveBeenCalledTimes(1)
   })
 
-  describe("Dimensions", () => {
-    it("fullscreen", () => {
-      const props = {
-        ...getProps(),
-        height: 400,
-        width: 400,
-      }
-      const wrapper = mount(<PlotlyChart {...props} />)
+  it("does not send a rerun msg if widget_state is empty", () => {
+    const widgetMgr = getWidgetMgr()
+    vi.spyOn(widgetMgr, "setStringValue")
 
-      expect(wrapper.find(Plot).props().layout.width).toBe(400)
-      expect(wrapper.find(Plot).props().layout.height).toBe(400)
-    })
+    const plotlyProto = { id: "plotly_chart" } as PlotlyChartProto
 
-    it("useContainerWidth true", () => {
-      const props = {
-        ...getProps({
-          useContainerWidth: true,
-        }),
-      }
-      const wrapper = mount(<PlotlyChart {...props} />)
+    widgetMgr.setStringValue(
+      plotlyProto,
+      '{"selection":{"points":[],"point_indices":[],"box":[],"lasso":[]}}',
+      { fromUi: true },
+      undefined
+    )
 
-      // an explicit value because useContainerWidth is passed
-      expect(wrapper.find(Plot).props().layout.width).not.toBeUndefined()
-      expect(wrapper.find(Plot).props().layout.height).toBeUndefined()
-    })
+    sendEmptySelection(
+      widgetMgr,
+      { id: "plotly_chart" } as PlotlyChartProto,
+      undefined
+    )
 
-    it("useContainerWidth false", () => {
-      const props = {
-        ...getProps({
-          useContainerWidth: false,
-        }),
-      }
-      const wrapper = mount(<PlotlyChart {...props} />)
+    // setStringValue is not called again
+    expect(widgetMgr.setStringValue).toHaveBeenCalledTimes(1)
+  })
+})
 
-      expect(wrapper.find(Plot).props().layout.width).toBeUndefined()
-      expect(wrapper.find(Plot).props().layout.height).toBeUndefined()
-    })
+describe("handleSelection", () => {
+  const mockFragmentId = "testFragment"
+  const proto = {
+    id: "plotly_chart",
+    selectionMode: [0, 1, 2],
+  } as PlotlyChartProto
 
-    // eslint-disable-next-line jest/expect-expect -- underlying testEnterAndExitFullscreen function has expect statements
-    it("renders properly when entering fullscreen and out of fullscreen and useContainerWidth is false", () => {
-      testEnterAndExitFullscreen(false)
-    })
+  it("should return early if no event is provided", () => {
+    const widgetMgr = getWidgetMgr()
+    vi.spyOn(widgetMgr, "setStringValue")
 
-    // eslint-disable-next-line jest/expect-expect -- underlying testEnterAndExitFullscreen function has expect statements
-    it("renders properly when entering fullscreen and out of fullscreen and useContainerWidth is true", () => {
-      testEnterAndExitFullscreen(true)
-    })
+    // @ts-expect-error
+    handleSelection(undefined, widgetMgr, proto, mockFragmentId)
+    expect(widgetMgr.setStringValue).not.toHaveBeenCalled()
   })
 
-  describe("Render iframe", () => {
-    const props = getProps({
-      chart: "url",
-      url: "http://url.test",
-      figure: undefined,
-    })
+  it("should handle an event with no points or selections", () => {
+    const event = { points: undefined, selections: undefined } as any
+    const widgetMgr = getWidgetMgr()
 
-    it("should render an iframe", () => {
-      const wrapper = mount(<PlotlyChart {...props} />)
+    vi.spyOn(widgetMgr, "setStringValue")
 
-      expect(wrapper.find("iframe").length).toBe(1)
-      expect(wrapper.find("iframe").props()).toMatchSnapshot()
+    handleSelection(event, widgetMgr, proto, mockFragmentId)
+    expect(widgetMgr.setStringValue).toHaveBeenCalledTimes(1)
+  })
+
+  it("should process events with points correctly", () => {
+    const event = {
+      points: [
+        { pointIndex: 1, data: { legendgroup: "group1" }, pointIndices: [1] },
+      ],
+    } as any
+    const widgetMgr = getWidgetMgr()
+
+    vi.spyOn(widgetMgr, "setStringValue")
+
+    handleSelection(event, widgetMgr, proto, mockFragmentId)
+    expect(widgetMgr.setStringValue).toHaveBeenCalledWith(
+      { id: "plotly_chart", selectionMode: [0, 1, 2] },
+      '{"selection":{"points":[{"point_index":1,"point_indices":[1],"legendgroup":"group1"}],"point_indices":[1],"box":[],"lasso":[]}}',
+      { fromUi: true },
+      "testFragment"
+    )
+  })
+
+  it("should process box selections correctly", () => {
+    const event = {
+      selections: [
+        {
+          type: "rect",
+          xref: "x",
+          yref: "y",
+          x0: "0",
+          x1: "1",
+          y0: "0",
+          y1: "1",
+        },
+      ],
+    } as any
+    const widgetMgr = getWidgetMgr()
+
+    vi.spyOn(widgetMgr, "setStringValue")
+
+    handleSelection(event, widgetMgr, proto, undefined)
+    expect(widgetMgr.setStringValue).toHaveBeenCalledWith(
+      { id: "plotly_chart", selectionMode: [0, 1, 2] },
+      '{"selection":{"points":[],"point_indices":[],"box":[{"xref":"x","yref":"y","x":["0","1"],"y":["0","1"]}],"lasso":[]}}',
+      { fromUi: true },
+      undefined
+    )
+  })
+
+  it("should process lasso selections correctly", () => {
+    const event = {
+      selections: [
+        { type: "path", xref: "x", yref: "y", path: "M4.0,8.0L4.0,7.8Z" },
+      ],
+    } as any
+    const widgetMgr = getWidgetMgr()
+
+    vi.spyOn(widgetMgr, "setStringValue")
+
+    handleSelection(event, widgetMgr, proto, mockFragmentId)
+    expect(widgetMgr.setStringValue).toHaveBeenCalledWith(
+      { id: "plotly_chart", selectionMode: [0, 1, 2] },
+      '{"selection":{"points":[],"point_indices":[],"box":[],"lasso":[{"xref":"x","yref":"y","x":[4,4],"y":[8,7.8]}]}}',
+      { fromUi: true },
+      "testFragment"
+    )
+  })
+
+  it("should not rerun if lasso selection is present but has no lasso selection mode", () => {
+    const event = {
+      selections: [
+        { type: "path", xref: "x", yref: "y", path: "M4.0,8.0L4.0,7.8Z" },
+      ],
+    } as any
+    const widgetMgr = getWidgetMgr()
+
+    vi.spyOn(widgetMgr, "setStringValue")
+
+    handleSelection(
+      event,
+      widgetMgr,
       // @ts-expect-error
-      expect(wrapper.find("iframe").prop("style").height).toBe(DEFAULT_HEIGHT)
-    })
-
-    it("should render with an specific height", () => {
-      const propsWithHeight = {
-        ...props,
-        height: 400,
-        width: 500,
-      }
-      const wrapper = mount(<PlotlyChart {...propsWithHeight} />)
-
-      // @ts-expect-error
-      expect(wrapper.find("iframe").prop("style").height).toBe(400)
-    })
+      { ...proto, selectionMode: [] },
+      mockFragmentId
+    )
+    expect(widgetMgr.setStringValue).not.toHaveBeenCalled()
   })
 
-  describe("Theming", () => {
-    it("pulls default config values from theme", () => {
-      const props = getProps()
-      const wrapper = mount(
-        <ThemeProvider
-          theme={mockTheme.emotion}
-          baseuiTheme={mockTheme.basewebTheme}
-        >
-          <PlotlyChart {...props} />
-        </ThemeProvider>
-      )
+  it("should not rerun if box selection is present but has no box selection mode", () => {
+    const event = {
+      selections: [
+        {
+          type: "rect",
+          xref: "x",
+          yref: "y",
+          x0: "0",
+          x1: "1",
+          y0: "0",
+          y1: "1",
+        },
+      ],
+    } as any
+    const widgetMgr = getWidgetMgr()
 
-      const { layout } = wrapper.find(Plot).first().props()
-      expect(layout.paper_bgcolor).toBe(mockTheme.emotion.colors.bgColor)
-      expect(layout.font?.color).toBe(mockTheme.emotion.colors.bodyText)
-    })
+    vi.spyOn(widgetMgr, "setStringValue")
 
-    it("has user specified config take priority", () => {
-      const props = getProps()
+    handleSelection(
+      event,
+      widgetMgr,
+      // @ts-expect-error
+      { ...proto, selectionMode: [] },
+      mockFragmentId
+    )
+    expect(widgetMgr.setStringValue).not.toHaveBeenCalled()
+  })
 
-      const spec = JSON.parse(props.element.figure?.spec || "") || {}
-      spec.layout = {
-        ...spec?.layout,
-        paper_bgcolor: "orange",
-      }
+  it("should not rerun if the return value is the same", () => {
+    const event = {
+      points: [],
+      selections: [],
+    } as any
+    const widgetMgr = getWidgetMgr()
 
-      props.element.figure = props.element.figure || {}
-      props.element.figure.spec = JSON.stringify(spec)
+    vi.spyOn(widgetMgr, "setStringValue")
 
-      const wrapper = mount(
-        <ThemeProvider
-          theme={mockTheme.emotion}
-          baseuiTheme={mockTheme.basewebTheme}
-        >
-          <PlotlyChart {...props} />
-        </ThemeProvider>
-      )
+    widgetMgr.setStringValue(
+      proto,
+      '{"selection":{"points":[],"point_indices":[],"box":[],"lasso":[]}}',
+      { fromUi: true },
+      undefined
+    )
 
-      const { layout } = wrapper.find(Plot).first().props()
-      expect(layout.paper_bgcolor).toBe("orange")
-      // Verify that things not overwritten by the user still fall back to the
-      // theme default.
-      expect(layout.font?.color).toBe(mockTheme.emotion.colors.bodyText)
-    })
+    handleSelection(event, widgetMgr, proto, mockFragmentId)
+    expect(widgetMgr.setStringValue).toHaveBeenCalledTimes(1)
+  })
+
+  it('should rerun if there is a lasso select and a box select when selection_mode=["box", "lasso"]', () => {
+    const boxEvent = {
+      points: [
+        {
+          pointIndex: 0,
+          data: { legendgroup: "group2" },
+          pointIndices: [0],
+          x: 0,
+          y: 0,
+        },
+      ],
+      selections: [
+        {
+          type: "rect",
+          xref: "x",
+          yref: "y",
+          x0: "0",
+          x1: "1",
+          y0: "0",
+          y1: "1",
+        },
+      ],
+    } as any
+
+    const widgetMgr = getWidgetMgr()
+
+    vi.spyOn(widgetMgr, "setStringValue")
+    handleSelection(
+      boxEvent,
+      widgetMgr,
+      { ...proto, selectionMode: [1, 2] } as PlotlyChartProto,
+      undefined
+    )
+    expect(widgetMgr.setStringValue).toHaveBeenCalledTimes(1)
+
+    const lassoEventAndBoxEvent = {
+      points: [
+        {
+          pointIndex: 1,
+          data: { legendgroup: "group1" },
+          pointIndices: [1],
+          x: 1,
+          y: 1,
+        },
+        {
+          pointIndex: 0,
+          data: { legendgroup: "group2" },
+          pointIndices: [0],
+          x: 0,
+          y: 0,
+        },
+      ],
+      selections: [
+        { type: "path", xref: "x", yref: "y", path: "M4.0,8.0L4.0,7Z" },
+        {
+          type: "rect",
+          xref: "x",
+          yref: "y",
+          x0: "0",
+          x1: "1",
+          y0: "0",
+          y1: "1",
+        },
+      ],
+    } as any
+
+    handleSelection(
+      lassoEventAndBoxEvent,
+      widgetMgr,
+      { ...proto, selectionMode: [1, 2] } as PlotlyChartProto,
+      undefined
+    )
+    expect(widgetMgr.setStringValue).toHaveBeenCalledTimes(2)
+    expect(widgetMgr.setStringValue).toHaveBeenLastCalledWith(
+      { id: "plotly_chart", selectionMode: [1, 2] },
+      '{"selection":{"points":[{"point_index":1,"point_indices":[1],"x":1,"y":1,"legendgroup":"group1"},{"point_index":0,"point_indices":[0],"x":0,"y":0,"legendgroup":"group2"}],"point_indices":[1,0],"box":[{"xref":"x","yref":"y","x":["0","1"],"y":["0","1"]}],"lasso":[{"xref":"x","yref":"y","x":[4,4],"y":[8,7]}]}}',
+      { fromUi: true },
+      undefined
+    )
+  })
+})
+
+describe("applyTheming", () => {
+  it("applies Streamlit theme when theme is streamlit", () => {
+    const mockPlotlyFigure = { data: [{}], layout: {}, frames: [] }
+    const chartTheme = "streamlit"
+
+    applyTheming(mockPlotlyFigure, chartTheme, mockTheme.emotion)
+
+    expect(applyStreamlitTheme).toHaveBeenCalled()
+  })
+
+  it("applies default theme when not using the default plotly theme", () => {
+    const mockPlotlyFigure = { data: [{}], layout: {}, frames: [] }
+    const chartTheme = "default"
+
+    applyTheming(mockPlotlyFigure, chartTheme, mockTheme.emotion)
+
+    expect(layoutWithThemeDefaults).toHaveBeenCalled()
   })
 })

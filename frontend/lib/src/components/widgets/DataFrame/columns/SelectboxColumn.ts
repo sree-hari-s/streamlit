@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 import { GridCell, GridCellKind } from "@glideapps/glide-data-grid"
 import { DropdownCellType } from "@glideapps/glide-data-grid-cells"
 
-import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
+import { isBooleanType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 import {
   isNullOrUndefined,
   notNullOrUndefined,
@@ -26,12 +26,11 @@ import {
 import {
   BaseColumn,
   BaseColumnProps,
-  ColumnCreator,
   getErrorCell,
-  toSafeString,
   mergeColumnParameters,
-  toSafeNumber,
   toSafeBoolean,
+  toSafeNumber,
+  toSafeString,
 } from "./utils"
 
 export interface SelectboxColumnParams {
@@ -54,8 +53,9 @@ function SelectboxColumn(props: BaseColumnProps): BaseColumn {
   const parameters = mergeColumnParameters(
     // Default parameters:
     {
-      options:
-        Quiver.getTypeName(props.arrowType) === "bool" ? [true, false] : [],
+      options: isBooleanType(props.arrowType)
+        ? [true, false]
+        : props.arrowType.categoricalOptions ?? [],
     },
     // User parameters:
     props.columnTypeOptions
@@ -76,6 +76,8 @@ function SelectboxColumn(props: BaseColumnProps): BaseColumn {
     copyData: "",
     contentAlign: props.contentAlignment,
     readonly: !props.isEditable,
+    // The text in pinned columns should be faded.
+    style: props.isPinned ? "faded" : "normal",
     data: {
       kind: "dropdown-cell",
       allowedValues: [
@@ -86,7 +88,6 @@ function SelectboxColumn(props: BaseColumnProps): BaseColumn {
           .map(opt => toSafeString(opt)), // convert everything to string
       ],
       value: "",
-      readonly: !props.isEditable,
     },
   } as DropdownCellType
 
@@ -134,4 +135,4 @@ function SelectboxColumn(props: BaseColumnProps): BaseColumn {
 
 SelectboxColumn.isEditableType = true
 
-export default SelectboxColumn as ColumnCreator
+export default SelectboxColumn

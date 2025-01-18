@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ from typing import NoReturn, Set, Tuple, cast
 
 from typing_extensions import TypeAlias
 
-PackageInfo: TypeAlias = Tuple[str, str, str, str, str, str]
+PackageInfo: TypeAlias = Tuple[str, str]
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 FRONTEND_DIR_LIB = SCRIPT_DIR.parent / "frontend/lib"
@@ -40,6 +40,7 @@ ACCEPTABLE_LICENSES = {
     "Apache-2.0",  # https://opensource.org/licenses/Apache-2.0
     "Apache-2.0 WITH LLVM-exception",  # https://spdx.org/licenses/LLVM-exception.html
     "0BSD",  # https://opensource.org/licenses/0BSD
+    "BlueOak-1.0.0",  # https://blueoakcouncil.org/license/1.0.0
     "BSD-2-Clause",  # https://opensource.org/licenses/BSD-2-Clause
     "BSD-3-Clause",  # https://opensource.org/licenses/BSD-3-Clause
     "ISC",  # https://opensource.org/licenses/ISC
@@ -50,8 +51,7 @@ ACCEPTABLE_LICENSES = {
     "Zlib",  # https://opensource.org/licenses/Zlib
     "Unlicense",  # https://unlicense.org/
     "WTFPL",  # http://www.wtfpl.net/about/
-    # Dual-licenses are acceptable if at least one of the two licenses is
-    # acceptable.
+    # Multi-licenses are acceptable if at least one of the licenses is acceptable.
     "(MIT OR Apache-2.0)",
     "(MPL-2.0 OR Apache-2.0)",
     "(MIT OR CC0-1.0)",
@@ -61,6 +61,10 @@ ACCEPTABLE_LICENSES = {
     "(MIT AND Zlib)",
     "(WTFPL OR MIT)",
     "(AFL-2.1 OR BSD-3-Clause)",
+    "(BSD-2-Clause OR MIT OR Apache-2.0)",
+    "Apache*",
+    "(MIT OR GPL-3.0-or-later)",
+    "Apache-2.0 AND MIT",
 }
 
 # Some of our dependencies have licenses that yarn fails to parse, but that
@@ -69,85 +73,51 @@ ACCEPTABLE_LICENSES = {
 PACKAGE_EXCEPTIONS: Set[PackageInfo] = {
     (
         # MIT license: https://github.com/mapbox/jsonlint
-        "@mapbox/jsonlint-lines-primitives",
-        "2.0.2",
+        "@mapbox/jsonlint-lines-primitives@npm:2.0.2",
         "UNKNOWN",
-        "git://github.com/mapbox/jsonlint.git",
-        "http://zaa.ch",
-        "Zach Carter",
-    ),
-    (
-        # Apache 2.0 license: https://github.com/google/flatbuffers
-        "flatbuffers",
-        "2.0.4",
-        "SEE LICENSE IN LICENSE.txt",
-        "git+https://github.com/google/flatbuffers.git",
-        "https://google.github.io/flatbuffers/",
-        "The FlatBuffers project",
     ),
     (
         # Mapbox Web SDK license: https://github.com/mapbox/mapbox-gl-js/blob/main/LICENSE.txt
-        "mapbox-gl",
-        "1.13.3",
+        "@plotly/mapbox-gl@npm:1.13.4",
         "SEE LICENSE IN LICENSE.txt",
-        "git://github.com/mapbox/mapbox-gl-js.git",
-        "Unknown",
-        "Unknown",
     ),
     (
         # Mapbox Web SDK license: https://github.com/mapbox/mapbox-gl-js/blob/main/LICENSE.txt
-        "mapbox-gl",
-        "1.10.1",
+        "mapbox-gl@npm:1.13.3",
         "SEE LICENSE IN LICENSE.txt",
-        "git://github.com/mapbox/mapbox-gl-js.git",
-        "Unknown",
-        "Unknown",
-    ),
-    (
-        # MIT license: https://github.com/dy/image-palette
-        "image-palette",
-        "2.1.0",
-        "MIT*",
-        "https://github.com/dy/image-palette.git",
-        "Unknown",
-        "Dmitry Yv",
-    ),
-    (
-        # CC-BY-3.0 license: https://github.com/cartodb/cartocolor#licensing
-        "cartocolor",
-        "4.0.2",
-        "UNKNOWN",
-        "https://github.com/cartodb/cartocolor",
-        "http://carto.com/",
-        "Unknown",
     ),
     (
         # Apache-2.0 license: https://github.com/saikocat/colorbrewer/blob/master/LICENSE.txt
-        "colorbrewer",
-        "1.0.0",
-        "Apache*",
-        "https://github.com/saikocat/colorbrewer",
-        "http://colorbrewer2.org/",
-        "Cynthia Brewer",
+        "colorbrewer@npm:1.5.6",
+        "UNKNOWN",
+    ),
+    (
+        # This is our workspace
+        "streamlit@workspace:.",
+        "UNKNOWN",
+    ),
+    (
+        # MIT license: https://github.com/felixge/node-stack-trace/blob/master/License
+        "stack-trace@npm:0.0.9",
+        "UNKNOWN",
     ),
 }
 
 
 def get_license_type(package: PackageInfo) -> str:
     """Return the license type string for a dependency entry."""
-    return package[2]
+    return package[1]
 
 
 def check_licenses(licenses) -> NoReturn:
     # `yarn licenses` outputs a bunch of lines.
     # The last line contains the JSON object we care about
-    licenses_json = json.loads(licenses[len(licenses) - 1])
-    assert licenses_json["type"] == "table"
-
-    # Pull out the list of package infos from the JSON.
-    packages = [
-        cast(PackageInfo, tuple(package)) for package in licenses_json["data"]["body"]
-    ]
+    packages = []
+    for license in licenses:
+        license_json = json.loads(license)
+        license_name = license_json["value"]
+        for package_name in license_json["children"].keys():
+            packages.append(cast(PackageInfo, (package_name, license_name)))
 
     # Discover dependency exceptions that are no longer used and can be
     # jettisoned, and print them out with a warning.
@@ -174,7 +144,7 @@ def check_licenses(licenses) -> NoReturn:
         print(f"{len(bad_packages)} unacceptable licenses")
         sys.exit(1)
 
-    print(f"No unacceptable licenses")
+    print(f"No unacceptable licenses: {len(packages)} checked")
     sys.exit(0)
 
 
@@ -182,7 +152,7 @@ def main() -> NoReturn:
     # Run `yarn licenses` for lib.
     licenses_output = (
         subprocess.check_output(
-            ["yarn", "licenses", "list", "--json", "--production", "--ignore-platform"],
+            ["yarn", "licenses", "list", "--json", "--production", "--recursive"],
             cwd=str(FRONTEND_DIR_LIB),
         )
         .decode()
@@ -192,7 +162,7 @@ def main() -> NoReturn:
     # Run `yarn licenses` for app.
     licenses_output = licenses_output + (
         subprocess.check_output(
-            ["yarn", "licenses", "list", "--json", "--production", "--ignore-platform"],
+            ["yarn", "licenses", "list", "--json", "--production", "--recursive"],
             cwd=str(FRONTEND_DIR_APP),
         )
         .decode()

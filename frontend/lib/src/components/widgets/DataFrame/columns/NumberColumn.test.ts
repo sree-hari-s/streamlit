@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,29 +15,52 @@
  */
 /* eslint-disable  @typescript-eslint/no-non-null-assertion */
 
-import { GridCellKind, NumberCell, TextCell } from "@glideapps/glide-data-grid"
+import { GridCellKind, NumberCell } from "@glideapps/glide-data-grid"
+import { Field, Float64, Int64, Uint64 } from "apache-arrow"
 
 import {
+  ArrowType,
+  DataFrameCellType,
   DataType,
-  Type as ArrowType,
-} from "@streamlit/lib/src/dataframes/Quiver"
+} from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 
-import { BaseColumnProps, isErrorCell } from "./utils"
 import NumberColumn, { NumberColumnParams } from "./NumberColumn"
+import { BaseColumnProps, ErrorCell, isErrorCell } from "./utils"
 
 const MOCK_FLOAT_ARROW_TYPE: ArrowType = {
-  pandas_type: "float64",
-  numpy_type: "float64",
+  type: DataFrameCellType.DATA,
+  arrowField: new Field("float_column", new Float64(), true),
+  pandasType: {
+    field_name: "float_column",
+    name: "float_column",
+    pandas_type: "float64",
+    numpy_type: "float64",
+    metadata: null,
+  },
 }
 
 const MOCK_INT_ARROW_TYPE: ArrowType = {
-  pandas_type: "int64",
-  numpy_type: "int64",
+  type: DataFrameCellType.DATA,
+  arrowField: new Field("int_column", new Int64(), true),
+  pandasType: {
+    field_name: "int_column",
+    name: "int_column",
+    pandas_type: "int64",
+    numpy_type: "int64",
+    metadata: null,
+  },
 }
 
 const MOCK_UINT_ARROW_TYPE: ArrowType = {
-  pandas_type: "uint64",
-  numpy_type: "uint64",
+  type: DataFrameCellType.DATA,
+  arrowField: new Field("uint_column", new Uint64(), true),
+  pandasType: {
+    field_name: "uint_column",
+    name: "uint_column",
+    pandas_type: "uint64",
+    numpy_type: "uint64",
+    metadata: null,
+  },
 }
 
 const NUMBER_COLUMN_TEMPLATE: Partial<BaseColumnProps> = {
@@ -48,6 +71,7 @@ const NUMBER_COLUMN_TEMPLATE: Partial<BaseColumnProps> = {
   isEditable: false,
   isHidden: false,
   isIndex: false,
+  isPinned: false,
   isStretched: false,
 }
 
@@ -235,8 +259,9 @@ describe("NumberColumn", () => {
     const mockColumn = getNumberColumn(MOCK_INT_ARROW_TYPE)
     const unsafeCell = mockColumn.getCell("1234567898765432123")
     expect(isErrorCell(unsafeCell)).toEqual(true)
-    expect((unsafeCell as TextCell)?.data).toEqual(
-      "⚠️ 1234567898765432123\n\nThe value is larger than the maximum supported integer values in number columns (2^53).\n"
+    expect((unsafeCell as ErrorCell)?.data).toEqual("1234567898765432123")
+    expect((unsafeCell as ErrorCell)?.errorDetails).toEqual(
+      "The value is larger than the maximum supported integer values in number columns (2^53)."
     )
   })
 
@@ -299,6 +324,25 @@ describe("NumberColumn", () => {
 
       const cell = mockColumn.getCell(input)
       expect(isErrorCell(cell)).toEqual(true)
+    }
+  )
+
+  it.each([
+    [10, "10"],
+    [1234567, "1234567"],
+    [12345.678, "12345.678"],
+    [-0.000123456, "-0.000123456"],
+    [null, ""],
+    [undefined, ""],
+  ])(
+    "uses raw number for copyData so that %p is copied as %p",
+    (input: number | null | undefined, expectedCopyData: string) => {
+      const mockColumn = getNumberColumn(MOCK_FLOAT_ARROW_TYPE, {
+        format: "$%.2f",
+      })
+
+      const cell = mockColumn.getCell(input)
+      expect(cell.copyData).toEqual(expectedCopyData)
     }
   )
 })

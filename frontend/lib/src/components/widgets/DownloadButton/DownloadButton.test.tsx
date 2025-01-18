@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,19 @@
  */
 
 import React from "react"
-import { screen, fireEvent } from "@testing-library/react"
-import "@testing-library/jest-dom"
+
+import { screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
 import { render } from "@streamlit/lib/src/test_util"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
-
 import { DownloadButton as DownloadButtonProto } from "@streamlit/lib/src/proto"
 import { mockEndpoints } from "@streamlit/lib/src/mocks/mocks"
-import DownloadButton, { Props } from "./DownloadButton"
 
-jest.mock("@streamlit/lib/src/WidgetStateManager")
-jest.mock("@streamlit/lib/src/StreamlitEndpoints")
+import DownloadButton, { createDownloadLink, Props } from "./DownloadButton"
+
+vi.mock("@streamlit/lib/src/WidgetStateManager")
+vi.mock("@streamlit/lib/src/StreamlitEndpoints")
 
 const getProps = (
   elementProps: Partial<DownloadButtonProto> = {},
@@ -40,8 +42,8 @@ const getProps = (
   width: 250,
   disabled: false,
   widgetMgr: new WidgetStateManager({
-    sendRerunBackMsg: jest.fn(),
-    formsDataChanged: jest.fn(),
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
   }),
   endpoints: mockEndpoints(),
   ...widgetProps,
@@ -62,7 +64,6 @@ describe("DownloadButton widget", () => {
 
     const downloadButton = screen.getByTestId("stDownloadButton")
 
-    expect(downloadButton).toHaveClass("row-widget")
     expect(downloadButton).toHaveClass("stDownloadButton")
     expect(downloadButton).toHaveStyle(`width: ${props.width}px`)
   })
@@ -79,21 +80,54 @@ describe("DownloadButton widget", () => {
   })
 
   describe("wrapped BaseButton", () => {
-    it("sets widget triggerValue and creates a download URL on click", () => {
+    it("sets widget triggerValue and creates a download URL on click", async () => {
+      const user = userEvent.setup()
       const props = getProps()
       render(<DownloadButton {...props} />)
 
       const downloadButton = screen.getByRole("button")
-
-      fireEvent.click(downloadButton)
+      await user.click(downloadButton)
 
       expect(props.widgetMgr.setTriggerValue).toHaveBeenCalledWith(
         props.element,
-        { fromUi: true }
+        { fromUi: true },
+        undefined
       )
 
       expect(props.endpoints.buildMediaURL).toHaveBeenCalledWith(
         "/media/mockDownloadURL"
+      )
+    })
+
+    it("has a correct new tab behaviour download link", () => {
+      const props = getProps()
+      const sameTabLink = createDownloadLink(
+        props.endpoints,
+        props.element.url,
+        false
+      )
+      expect(sameTabLink.getAttribute("target")).toBe("_self")
+
+      const newTabLink = createDownloadLink(
+        props.endpoints,
+        props.element.url,
+        true
+      )
+      expect(newTabLink.getAttribute("target")).toBe("_blank")
+    })
+
+    it("can set fragmentId on click", async () => {
+      const user = userEvent.setup()
+      const props = getProps(undefined, { fragmentId: "myFragmentId" })
+      render(<DownloadButton {...props} />)
+
+      const downloadButton = screen.getByRole("button")
+      await user.click(downloadButton)
+
+      expect(props.widgetMgr.setTriggerValue).toHaveBeenCalledWith(
+        props.element,
+        { fromUi: true },
+        "myFragmentId"
       )
     })
 

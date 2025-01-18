@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 import React, { ReactElement } from "react"
+
 import { SwitchCamera } from "@emotion-icons/material-rounded"
 
 import BaseButton, {
@@ -25,6 +26,7 @@ import Tooltip, {
   Placement,
 } from "@streamlit/lib/src/components/shared/Tooltip"
 import themeColors from "@streamlit/lib/src/theme/emotionBaseTheme/themeColors"
+
 import { StyledSwitchFacingModeButton } from "./styled-components"
 
 export enum FacingMode {
@@ -40,8 +42,8 @@ const SwitchFacingModeButton = ({
   switchFacingMode,
 }: SwitchFacingModeButtonProps): ReactElement => {
   return (
-    <StyledSwitchFacingModeButton>
-      <Tooltip content={"Switch camera"} placement={Placement.TOP_RIGHT}>
+    <StyledSwitchFacingModeButton data-testid="stCameraInputSwitchButton">
+      <Tooltip content="Switch camera" placement={Placement.TOP_RIGHT}>
         <BaseButton kind={BaseButtonKind.MINIMAL} onClick={switchFacingMode}>
           <Icon
             content={SwitchCamera}

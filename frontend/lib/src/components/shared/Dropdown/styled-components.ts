@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,11 +29,14 @@ export const ThemedStyledDropdownListItem = styled(StyledDropdownListItem, {
     alignItems: "center",
     paddingTop: theme.spacing.none,
     paddingBottom: theme.spacing.none,
+    paddingLeft: theme.spacing.lg,
+    paddingRight: theme.spacing.lg,
     background: $isHighlighted ? backgroundColor : undefined,
+
     // Override the default itemSize set on the component's JSX
     // on mobile, so we can make list items taller and scrollable
-    [`@media (max-width: 768px)`]: {
-      minHeight: "40px",
+    [`@media (max-width: ${theme.breakpoints.md})`]: {
+      minHeight: theme.sizes.dropdownItemHeight,
       height: "auto !important",
     },
     "&:hover, &:active, &:focus-visible": {

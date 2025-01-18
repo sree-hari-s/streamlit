@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,14 @@
  */
 
 import React from "react"
-import { render } from "@streamlit/lib/src/test_util"
-import { screen, fireEvent } from "@testing-library/react"
-import "@testing-library/jest-dom"
 
+import { act, screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
+import { render } from "@streamlit/lib/src/test_util"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 import { Radio as RadioProto } from "@streamlit/lib/src/proto"
+
 import Radio, { Props } from "./Radio"
 
 const getProps = (
@@ -38,8 +40,8 @@ const getProps = (
   width: 0,
   disabled: false,
   widgetMgr: new WidgetStateManager({
-    sendRerunBackMsg: jest.fn(),
-    formsDataChanged: jest.fn(),
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
   }),
   ...otherProps,
 })
@@ -57,13 +59,27 @@ describe("Radio widget", () => {
 
   it("sets widget value on mount", () => {
     const props = getProps()
-    jest.spyOn(props.widgetMgr, "setIntValue")
+    vi.spyOn(props.widgetMgr, "setIntValue")
     render(<Radio {...props} />)
 
     expect(props.widgetMgr.setIntValue).toHaveBeenCalledWith(
       props.element,
       props.element.default,
-      { fromUi: false }
+      { fromUi: false },
+      undefined
+    )
+  })
+
+  it("can pass fragmentId to setIntValue", () => {
+    const props = getProps(undefined, { fragmentId: "myFragmentId" })
+    vi.spyOn(props.widgetMgr, "setIntValue")
+    render(<Radio {...props} />)
+
+    expect(props.widgetMgr.setIntValue).toHaveBeenCalledWith(
+      props.element,
+      props.element.default,
+      { fromUi: false },
+      "myFragmentId"
     )
   })
 
@@ -72,7 +88,6 @@ describe("Radio widget", () => {
     render(<Radio {...props} />)
     const radioElement = screen.getByTestId("stRadio")
 
-    expect(radioElement).toHaveClass("row-widget")
     expect(radioElement).toHaveClass("stRadio")
     expect(radioElement).toHaveStyle(`width: ${props.width}px`)
   })
@@ -151,46 +166,52 @@ describe("Radio widget", () => {
     expect(noOptionLabel).toBeInTheDocument()
   })
 
-  it("sets the widget value when an option is selected", () => {
+  it("sets the widget value when an option is selected", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    jest.spyOn(props.widgetMgr, "setIntValue")
+    vi.spyOn(props.widgetMgr, "setIntValue")
     render(<Radio {...props} />)
     const radioOptions = screen.getAllByRole("radio")
     const secondOption = radioOptions[1]
 
-    fireEvent.click(secondOption)
+    await user.click(secondOption)
 
     expect(props.widgetMgr.setIntValue).toHaveBeenLastCalledWith(
       props.element,
       1,
-      { fromUi: true }
+      { fromUi: true },
+      undefined
     )
     expect(secondOption).toBeChecked()
   })
 
-  it("resets its value when form is cleared", () => {
+  it("resets its value when form is cleared", async () => {
+    const user = userEvent.setup()
     // Create a widget in a clearOnSubmit form
     const props = getProps({ formId: "form" })
-    props.widgetMgr.setFormClearOnSubmit("form", true)
+    props.widgetMgr.setFormSubmitBehaviors("form", true)
 
-    jest.spyOn(props.widgetMgr, "setIntValue")
+    vi.spyOn(props.widgetMgr, "setIntValue")
     render(<Radio {...props} />)
 
     const radioOptions = screen.getAllByRole("radio")
     const secondOption = radioOptions[1]
 
     // Change the widget value
-    fireEvent.click(secondOption)
+    await user.click(secondOption)
     expect(secondOption).toBeChecked()
 
     expect(props.widgetMgr.setIntValue).toHaveBeenLastCalledWith(
       props.element,
       1,
-      { fromUi: true }
+      { fromUi: true },
+      undefined
     )
 
     // "Submit" the form
-    props.widgetMgr.submitForm("form")
+    act(() => {
+      props.widgetMgr.submitForm("form", undefined)
+    })
 
     // Our widget should be reset, and the widgetMgr should be updated
     // @ts-expect-error
@@ -202,7 +223,8 @@ describe("Radio widget", () => {
       props.element.default,
       {
         fromUi: true,
-      }
+      },
+      undefined
     )
   })
 })

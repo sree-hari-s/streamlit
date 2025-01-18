@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,12 @@
  */
 
 import React from "react"
-import { screen } from "@testing-library/react"
-import "@testing-library/jest-dom"
-import { render } from "@streamlit/lib/src/test_util"
 
+import { screen } from "@testing-library/react"
+
+import { render } from "@streamlit/lib/src/test_util"
 import { LinkButton as LinkButtonProto } from "@streamlit/lib/src/proto"
+
 import LinkButton, { Props } from "./LinkButton"
 
 const getProps = (
@@ -51,7 +52,6 @@ describe("LinkButton widget", () => {
 
     const linkButton = screen.getByTestId("stLinkButton")
 
-    expect(linkButton).toHaveClass("row-widget")
     expect(linkButton).toHaveClass("stLinkButton")
     expect(linkButton).toHaveStyle(`width: ${props.width}px`)
   })
@@ -68,12 +68,22 @@ describe("LinkButton widget", () => {
   })
 
   describe("wrapped BaseLinkButton", () => {
-    it("handles the disabled prop", () => {
-      const props = getProps({}, { disabled: true })
-      render(<LinkButton {...props} />)
+    const LINK_BUTTON_TYPES = ["primary", "secondary", "tertiary"]
 
-      const linkButton = screen.getByRole("link")
-      expect(linkButton).toHaveAttribute("disabled")
+    LINK_BUTTON_TYPES.forEach(type => {
+      it(`renders ${type} link button correctly`, () => {
+        render(<LinkButton {...getProps({ type })} />)
+
+        const linkButton = screen.getByTestId(`stBaseLinkButton-${type}`)
+        expect(linkButton).toBeInTheDocument()
+      })
+
+      it(`renders disabled ${type} correctly`, () => {
+        render(<LinkButton {...getProps({ type }, { disabled: true })} />)
+
+        const linkButton = screen.getByRole("link")
+        expect(linkButton).toHaveAttribute("disabled")
+      })
     })
 
     it("does not use container width by default", () => {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,9 +23,9 @@ import React, { FC, memo } from "react"
 import Flake0 from "@streamlit/lib/src/assets/img/snow/flake-0.png"
 import Flake1 from "@streamlit/lib/src/assets/img/snow/flake-1.png"
 import Flake2 from "@streamlit/lib/src/assets/img/snow/flake-2.png"
-
 import Particles from "@streamlit/lib/src/components/elements/Particles"
 import { ParticleProps } from "@streamlit/lib/src/components/elements/Particles/Particles"
+import { RenderInPortalIfExists } from "@streamlit/lib/src/components/core/Portal/RenderInPortalIfExists"
 
 import { StyledFlake } from "./styled-components"
 
@@ -39,21 +39,26 @@ export interface Props {
   scriptRunId: string
 }
 
-const Flake: FC<ParticleProps> = ({ particleType }) => (
-  <StyledFlake src={FLAKE_IMAGES[particleType]} />
-)
+const Flake: FC<React.PropsWithChildren<ParticleProps>> = ({
+  particleType,
+}) => <StyledFlake src={FLAKE_IMAGES[particleType]} />
 
-const Snow: FC<Props> = function Snow({ scriptRunId }) {
+const Snow: FC<React.PropsWithChildren<Props>> = function Snow({
+  scriptRunId,
+}) {
   // Keys should be unique each time, so React replaces the images in the DOM and their animations
   // actually rerun.
   return (
-    <Particles
-      className="snow"
-      scriptRunId={scriptRunId}
-      numParticleTypes={NUM_FLAKE_TYPES}
-      numParticles={NUM_FLAKES}
-      ParticleComponent={Flake}
-    />
+    <RenderInPortalIfExists>
+      <Particles
+        className="stSnow"
+        data-testid="stSnow"
+        scriptRunId={scriptRunId}
+        numParticleTypes={NUM_FLAKE_TYPES}
+        numParticles={NUM_FLAKES}
+        ParticleComponent={Flake}
+      />
+    </RenderInPortalIfExists>
   )
 }
 

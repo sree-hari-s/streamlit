@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,21 @@
  */
 
 import nodeEmoji from "node-emoji"
+
 import { grabTheRightIcon } from "@streamlit/lib/src/vendor/twemoji"
 import { IGuestToHostMessage } from "@streamlit/lib/src/hostComm/types"
 import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
+
+function iconToUrl(icon: string): string {
+  const iconRegexp = /^:(.+)\/(.+):$/
+  const matchResult = icon.match(iconRegexp)
+  if (matchResult === null) {
+    // If the icon is invalid, return just an empty string
+    return ""
+  }
+
+  return `https://fonts.gstatic.com/s/i/short-term/release/materialsymbolsrounded/${matchResult[2]}/default/24px.svg`
+}
 
 /**
  * Set the provided url/emoji as the page favicon.
@@ -34,12 +46,14 @@ export function handleFavicon(
   const emoji = extractEmoji(favicon)
   let imageUrl
 
-  if (emoji) {
+  if (emoji && !favicon.startsWith(":material")) {
     // Find the corresponding Twitter emoji on the CDN.
     const codepoint = grabTheRightIcon(emoji)
     const emojiUrl = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/${codepoint}.png`
 
     imageUrl = emojiUrl
+  } else if (favicon.startsWith(":material")) {
+    imageUrl = iconToUrl(favicon)
   } else {
     imageUrl = endpoints.buildMediaURL(favicon)
   }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,17 @@
  * limitations under the License.
  */
 
-import axios from "axios"
-import _ from "lodash"
 import React from "react"
+
+import axios from "axios"
+import isEqual from "lodash/isEqual"
+import zip from "lodash/zip"
 import { FileRejection } from "react-dropzone"
 
+import {
+  isNullOrUndefined,
+  labelVisibilityProtoValueToEnum,
+} from "@streamlit/lib/src/util/utils"
 import {
   FileUploader as FileUploaderProto,
   FileUploaderState as FileUploaderStateProto,
@@ -27,7 +33,6 @@ import {
   UploadedFileInfo as UploadedFileInfoProto,
 } from "@streamlit/lib/src/proto"
 import { FormClearHelper } from "@streamlit/lib/src/components/widgets/Form"
-
 import {
   FileSize,
   getSizeDisplay,
@@ -36,16 +41,16 @@ import {
 import { FileUploadClient } from "@streamlit/lib/src/FileUploadClient"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 import {
-  WidgetLabel,
   StyledWidgetLabelHelp,
+  WidgetLabel,
 } from "@streamlit/lib/src/components/widgets/BaseWidget"
 import TooltipIcon from "@streamlit/lib/src/components/shared/TooltipIcon"
 import { Placement } from "@streamlit/lib/src/components/shared/Tooltip"
-import { labelVisibilityProtoValueToEnum } from "@streamlit/lib/src/util/utils"
+
 import FileDropzone from "./FileDropzone"
 import { StyledFileUploader } from "./styled-components"
 import UploadedFiles from "./UploadedFiles"
-import { UploadFileInfo, UploadedStatus } from "./UploadFileInfo"
+import { UploadedStatus, UploadFileInfo } from "./UploadFileInfo"
 
 export interface Props {
   disabled: boolean
@@ -53,6 +58,7 @@ export interface Props {
   widgetMgr: WidgetStateManager
   uploadClient: FileUploadClient
   width: number
+  fragmentId?: string
 }
 
 type FileUploaderStatus =
@@ -77,6 +83,17 @@ class FileUploader extends React.PureComponent<Props, State> {
    */
   private localFileIdCounter = 1
 
+  /**
+   * A flag to handle the case where a file uploader that only accepts one file
+   * at a time has its file replaced, which we want to treat as a single change
+   * rather than the deletion of a file followed by the upload of another.
+   * Doing this ensures that the script (and thus callbacks, etc) is only run a
+   * single time when replacing a file.  Note that deleting a file and uploading
+   * a new one with two interactions (clicking the 'X', then dragging a file
+   * into the file uploader) will still cause the script to execute twice.
+   */
+  private forceUpdatingStatus = false
+
   public constructor(props: Props) {
     super(props)
     this.state = this.initialValue
@@ -87,12 +104,12 @@ class FileUploader extends React.PureComponent<Props, State> {
     const { widgetMgr, element } = this.props
 
     const widgetValue = widgetMgr.getFileUploaderStateValue(element)
-    if (widgetValue == null) {
+    if (isNullOrUndefined(widgetValue)) {
       return emptyState
     }
 
     const { uploadedFileInfo } = widgetValue
-    if (uploadedFileInfo == null || uploadedFileInfo.length === 0) {
+    if (isNullOrUndefined(uploadedFileInfo) || uploadedFileInfo.length === 0) {
       return emptyState
     }
 
@@ -135,7 +152,7 @@ class FileUploader extends React.PureComponent<Props, State> {
 
     // If any of our files is Uploading or Deleting, then we're currently
     // updating.
-    if (this.state.files.some(isFileUpdating)) {
+    if (this.state.files.some(isFileUpdating) || this.forceUpdatingStatus) {
       return "updating"
     }
 
@@ -149,25 +166,43 @@ class FileUploader extends React.PureComponent<Props, State> {
       return
     }
 
-    // If we have had no completed uploads, our widgetValue will be
-    // undefined, and we can early-out of the state update.
     const newWidgetValue = this.createWidgetValue()
-    if (newWidgetValue === undefined) {
-      return
-    }
-
-    const { element, widgetMgr } = this.props
+    const { element, widgetMgr, fragmentId } = this.props
 
     // Maybe send a widgetValue update to the widgetStateManager.
     const prevWidgetValue = widgetMgr.getFileUploaderStateValue(element)
-    if (!_.isEqual(newWidgetValue, prevWidgetValue)) {
-      widgetMgr.setFileUploaderStateValue(element, newWidgetValue, {
-        fromUi: true,
-      })
+    if (!isEqual(newWidgetValue, prevWidgetValue)) {
+      widgetMgr.setFileUploaderStateValue(
+        element,
+        newWidgetValue,
+        {
+          fromUi: true,
+        },
+        fragmentId
+      )
     }
   }
 
-  private createWidgetValue(): FileUploaderStateProto | undefined {
+  public componentDidMount(): void {
+    const newWidgetValue = this.createWidgetValue()
+    const { element, widgetMgr, fragmentId } = this.props
+
+    // Set the state value on mount, to avoid triggering an extra rerun after
+    // the first rerun.
+    const prevWidgetValue = widgetMgr.getFileUploaderStateValue(element)
+    if (prevWidgetValue === undefined) {
+      widgetMgr.setFileUploaderStateValue(
+        element,
+        newWidgetValue,
+        {
+          fromUi: false,
+        },
+        fragmentId
+      )
+    }
+  }
+
+  private createWidgetValue(): FileUploaderStateProto {
     const uploadedFileInfo: UploadedFileInfoProto[] = this.state.files
       .filter(f => f.status.type === "uploaded")
       .map(f => {
@@ -235,11 +270,13 @@ class FileUploader extends React.PureComponent<Props, State> {
             f => f.status.type !== "error"
           )
           if (existingFile) {
+            this.forceUpdatingStatus = true
             this.deleteFile(existingFile.id)
+            this.forceUpdatingStatus = false
           }
         }
 
-        _.zip(fileURLsArray, acceptedFiles).forEach(
+        zip(fileURLsArray, acceptedFiles).forEach(
           ([fileURLs, acceptedFile]) => {
             this.uploadFile(fileURLs as FileURLsProto, acceptedFile as File)
           }
@@ -326,7 +363,7 @@ class FileUploader extends React.PureComponent<Props, State> {
     fileUrls: IFileURLs
   ): void => {
     const curFile = this.getFile(localFileId)
-    if (curFile == null || curFile.status.type !== "uploading") {
+    if (isNullOrUndefined(curFile) || curFile.status.type !== "uploading") {
       // The file may have been canceled right before the upload
       // completed. In this case, we just bail.
       return
@@ -373,7 +410,7 @@ class FileUploader extends React.PureComponent<Props, State> {
    */
   public deleteFile = (fileId: number): void => {
     const file = this.getFile(fileId)
-    if (file == null) {
+    if (isNullOrUndefined(file)) {
       return
     }
 
@@ -432,7 +469,7 @@ class FileUploader extends React.PureComponent<Props, State> {
    */
   private onUploadProgress = (event: ProgressEvent, fileId: number): void => {
     const file = this.getFile(fileId)
-    if (file == null || file.status.type !== "uploading") {
+    if (isNullOrUndefined(file) || file.status.type !== "uploading") {
       return
     }
 
@@ -459,14 +496,16 @@ class FileUploader extends React.PureComponent<Props, State> {
   private onFormCleared = (): void => {
     this.setState({ files: [] }, () => {
       const newWidgetValue = this.createWidgetValue()
-      if (newWidgetValue == null) {
+      if (isNullOrUndefined(newWidgetValue)) {
         return
       }
 
-      this.props.widgetMgr.setFileUploaderStateValue(
-        this.props.element,
+      const { widgetMgr, element, fragmentId } = this.props
+      widgetMgr.setFileUploaderStateValue(
+        element,
         newWidgetValue,
-        { fromUi: true }
+        { fromUi: true },
+        fragmentId
       )
     })
   }
@@ -489,7 +528,10 @@ class FileUploader extends React.PureComponent<Props, State> {
     const newestToOldestFiles = files.slice().reverse()
 
     return (
-      <StyledFileUploader data-testid="stFileUploader">
+      <StyledFileUploader
+        className="stFileUploader"
+        data-testid="stFileUploader"
+      >
         <WidgetLabel
           label={element.label}
           disabled={disabled}

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,17 @@
  */
 
 import React, { ReactElement } from "react"
+
 import { useTheme } from "@emotion/react"
-import { LibContext } from "@streamlit/lib/src/components/core/LibContext"
-import { EmotionTheme, isPresetTheme } from "@streamlit/lib/src/theme"
 import {
-  ProgressBar as UIProgressBar,
   ProgressBarOverrides,
+  ProgressBar as UIProgressBar,
 } from "baseui/progress-bar"
 import { mergeOverrides } from "baseui"
 import { Overrides } from "baseui/overrides"
+
+import { EmotionTheme, isPresetTheme } from "@streamlit/lib/src/theme"
+import { LibContext } from "@streamlit/lib/src/components/core/LibContext"
 
 export enum Size {
   EXTRASMALL = "xs",

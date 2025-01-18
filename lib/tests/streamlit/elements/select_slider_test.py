@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 """slider unit test."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -24,7 +25,13 @@ from parameterized import parameterized
 import streamlit as st
 from streamlit.errors import StreamlitAPIException
 from streamlit.proto.LabelVisibilityMessage_pb2 import LabelVisibilityMessage
+from streamlit.testing.v1.app_test import AppTest
+from streamlit.testing.v1.util import patch_config_options
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
+from tests.streamlit.data_test_cases import (
+    SHARED_TEST_CASES,
+    CaseMetadata,
+)
 
 
 class SliderTest(DeltaGeneratorTestCase):
@@ -55,32 +62,24 @@ class SliderTest(DeltaGeneratorTestCase):
         self.assertEqual(c.disabled, True)
 
     @parameterized.expand(
-        [
-            (5, [1, 2, 3, 4, 5], [4]),  # list
-            (5, (1, 2, 3, 4, 5), [4]),  # tuple
-            (5, np.array([1, 2, 3, 4, 5]), [4]),  # numpy array
-            (5, pd.Series([1, 2, 3, 4, 5]), [4]),  # pandas series
-            (5, pd.DataFrame([1, 2, 3, 4, 5]), [4]),  # pandas dataframe
-            (
-                5,
-                pd.DataFrame(  # pandas dataframe with multiple columns
-                    {
-                        "first column": [1, 2, 3, 4, 5],
-                        "second column": [10, 20, 30, 40, 50],
-                    }
-                ),
-                [4],
-            ),
-        ]
+        SHARED_TEST_CASES,
     )
-    def test_options_types(self, value, options, default):
+    def test_option_types(self, name: str, input_data: Any, metadata: CaseMetadata):
         """Test that it supports different types of options."""
+        if len(metadata.expected_sequence) == 0:
+            # Empty option sequences are not supported
+            # in select slider -> skip the test
+            with pytest.raises(StreamlitAPIException):
+                st.select_slider("the label", input_data)
+            return
 
-        st.select_slider("the label", value=value, options=options)
+        st.select_slider("the label", input_data)
 
         c = self.get_delta_from_queue().new_element.slider
-        self.assertEqual(c.label, "the label")
-        self.assertEqual(c.default, default)
+        assert c.label == "the label"
+        assert {str(item) for item in c.options} == {
+            str(item) for item in metadata.expected_sequence
+        }
 
     @parameterized.expand([("red", [1, 2, 3]), (("red", "green"), ["red", 2, 3])])
     def test_invalid_values(self, value, options):
@@ -262,3 +261,80 @@ class SliderTest(DeltaGeneratorTestCase):
             "Unsupported label_visibility option 'wrong_value'. Valid values are "
             "'visible', 'hidden' or 'collapsed'.",
         )
+
+    def test_shows_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.select_slider("the label", ["option 1", "option 2"]))()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)
+
+
+def test_select_slider_enum_coercion():
+    """Test E2E Enum Coercion on a select_slider."""
+
+    def script():
+        from enum import Enum
+
+        import streamlit as st
+
+        class EnumA(Enum):
+            A = 1
+            B = 2
+            C = 3
+
+        selected = st.select_slider("my_enum", EnumA, value=EnumA.A)
+        st.text(id(selected.__class__))
+        st.text(id(EnumA))
+        st.text(selected in EnumA)
+
+    at = AppTest.from_function(script).run()
+
+    def test_enum():
+        select_slider = at.select_slider[0]
+        original_class = select_slider.value.__class__
+        select_slider.set_value(original_class.C).run()
+        assert at.text[0].value == at.text[1].value, "Enum Class ID not the same"
+        assert at.text[2].value == "True", "Not all enums found in class"
+
+    with patch_config_options({"runner.enumCoercion": "nameOnly"}):
+        test_enum()
+    with patch_config_options({"runner.enumCoercion": "off"}):
+        with pytest.raises(AssertionError):
+            test_enum()  # expect a failure with the config value off.
+
+
+def test_select_slider_enum_coercion_multivalue():
+    """Test E2E Enum Coercion on a selectbox."""
+
+    def script():
+        from enum import Enum
+
+        import streamlit as st
+
+        class EnumA(Enum):
+            A = 1
+            B = 2
+            C = 3
+
+        selected_list = st.select_slider("my_enum", EnumA, value=[EnumA.A, EnumA.C])
+        st.text(id(selected_list[0].__class__))
+        st.text(id(EnumA))
+        st.text(all(selected in EnumA for selected in selected_list))
+
+    at = AppTest.from_function(script).run()
+
+    def test_enum():
+        select_slider = at.select_slider[0]
+        original_class = select_slider.value[0].__class__
+        select_slider.set_value([original_class.A, original_class.B]).run()
+        assert at.text[0].value == at.text[1].value, "Enum Class ID not the same"
+        assert at.text[2].value == "True", "Not all enums found in class"
+
+    with patch_config_options({"runner.enumCoercion": "nameOnly"}):
+        test_enum()
+    with patch_config_options({"runner.enumCoercion": "off"}):
+        with pytest.raises(AssertionError):
+            test_enum()  # expect a failure with the config value off.

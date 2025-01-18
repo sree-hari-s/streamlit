@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,20 @@
 
 import styled from "@emotion/styled"
 
-export const StyledFormSubmitContent = styled.div(() => ({
+export const StyledFormSubmitContent = styled.div({
   display: "flex",
-}))
+})
 
-export const StyledForm = styled.div(({ theme }) => ({
-  border: `1px solid ${theme.colors.fadedText10}`,
-  borderRadius: theme.radii.lg,
-  padding: "calc(1em - 1px)", // 1px to account for border.
+export interface StyledFormProps {
+  border: boolean
+}
+
+export const StyledForm = styled.div<StyledFormProps>(({ theme, border }) => ({
+  ...(border && {
+    border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
+    borderRadius: theme.radii.default,
+    padding: `calc(${theme.spacing.lg} - ${theme.sizes.borderWidth})`,
+  }),
 }))
 
 export const StyledErrorContainer = styled.div(({ theme }) => ({

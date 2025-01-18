@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,21 +15,21 @@
  */
 
 import React, { Fragment, ReactElement } from "react"
+
 import { Heading as HeadingProto } from "@streamlit/lib/src/proto"
 import IsSidebarContext from "@streamlit/lib/src/components/core/IsSidebarContext"
+import IsDialogContext from "@streamlit/lib/src/components/core/IsDialogContext"
 
 import {
-  StyledHeaderContainer,
+  StyledHeaderDivider,
   StyledStreamlitMarkdown,
-  StyledDivider,
 } from "./styled-components"
-
 import "katex/dist/katex.min.css"
 import {
-  InlineTooltipIcon,
-  StyledLabelHelpWrapper,
-} from "@streamlit/lib/src/components/shared/TooltipIcon"
-import { HeadingWithAnchor, RenderedMarkdown, Tags } from "./StreamlitMarkdown"
+  HeadingWithActionElements,
+  RenderedMarkdown,
+  Tags,
+} from "./StreamlitMarkdown"
 
 export interface HeadingProtoProps {
   width: number
@@ -56,72 +56,48 @@ function makeMarkdownHeading(tag: string, markdown: string): string {
 function Heading(props: HeadingProtoProps): ReactElement {
   const { width, element } = props
   const { tag, anchor, body, help, hideAnchor, divider } = element
-  const isSidebar = React.useContext(IsSidebarContext)
+  const isInSidebar = React.useContext(IsSidebarContext)
+  const isInDialog = React.useContext(IsDialogContext)
   // st.header can contain new lines which are just interpreted as new
   // markdown to be rendered as such.
   const [heading, ...rest] = body.split("\n")
 
   return (
-    <div className="stHeadingContainer">
-      <div className="stMarkdown" style={{ width }}>
-        <StyledStreamlitMarkdown
-          isCaption={Boolean(false)}
-          isInSidebar={isSidebar}
-          style={{ width }}
-          data-testid="stMarkdownContainer"
+    <div style={{ width }} className="stHeading" data-testid="stHeading">
+      <StyledStreamlitMarkdown
+        isCaption={Boolean(false)}
+        isInSidebarOrDialog={isInSidebar || isInDialog}
+        style={{ width }}
+        data-testid="stMarkdownContainer"
+      >
+        <HeadingWithActionElements
+          anchor={anchor}
+          help={help}
+          hideAnchor={hideAnchor}
+          tag={tag}
         >
-          <StyledHeaderContainer>
-            <HeadingWithAnchor
-              tag={tag}
-              anchor={anchor}
-              hideAnchor={hideAnchor}
-            >
-              {help ? (
-                <StyledLabelHelpWrapper>
-                  <RenderedMarkdown
-                    source={makeMarkdownHeading(tag, heading)}
-                    allowHTML={false}
-                    // this is purely an inline string
-                    overrideComponents={{
-                      p: Fragment,
-                      h1: Fragment,
-                      h2: Fragment,
-                      h3: Fragment,
-                      h4: Fragment,
-                      h5: Fragment,
-                      h6: Fragment,
-                    }}
-                  />
-                  <InlineTooltipIcon content={help} />
-                </StyledLabelHelpWrapper>
-              ) : (
-                <>
-                  <RenderedMarkdown
-                    source={makeMarkdownHeading(tag, heading)}
-                    allowHTML={false}
-                    // this is purely an inline string
-                    overrideComponents={{
-                      p: Fragment,
-                      h1: Fragment,
-                      h2: Fragment,
-                      h3: Fragment,
-                      h4: Fragment,
-                      h5: Fragment,
-                      h6: Fragment,
-                    }}
-                  />
-                </>
-              )}
-            </HeadingWithAnchor>
-          </StyledHeaderContainer>
-          {/* Only the first line of the body is used as a heading, the remaining text is added as regular mardkown below. */}
-          {rest.length > 0 && (
-            <RenderedMarkdown source={rest.join("\n")} allowHTML={false} />
-          )}
-        </StyledStreamlitMarkdown>
-      </div>
+          <RenderedMarkdown
+            allowHTML={false}
+            source={makeMarkdownHeading(tag, heading)}
+            // this is purely an inline string
+            overrideComponents={{
+              p: Fragment,
+              h1: Fragment,
+              h2: Fragment,
+              h3: Fragment,
+              h4: Fragment,
+              h5: Fragment,
+              h6: Fragment,
+            }}
+          />
+        </HeadingWithActionElements>
+        {/* Only the first line of the body is used as a heading, the remaining text is added as regular mardkown below. */}
+        {rest.length > 0 && (
+          <RenderedMarkdown source={rest.join("\n")} allowHTML={false} />
+        )}
+      </StyledStreamlitMarkdown>
       {divider && (
-        <StyledDivider
+        <StyledHeaderDivider
           data-testid="stHeadingDivider"
           rainbow={divider.includes("linear")}
           color={divider}

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,22 @@
  * limitations under the License.
  */
 
-import { GridCellKind, LoadingCell } from "@glideapps/glide-data-grid"
+import { GridCellKind } from "@glideapps/glide-data-grid"
 import { SparklineCellType } from "@glideapps/glide-data-grid-cells"
+import { Field, Float64, List } from "apache-arrow"
 
-import { BaseColumnProps, isErrorCell } from "./utils"
+import { DataFrameCellType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
+
 import {
-  ChartColumnParams,
-  LineChartColumn,
+  AREA_CHART_TYPE,
+  AreaChartColumn,
+  BAR_CHART_TYPE,
   BarChartColumn,
+  ChartColumnParams,
+  LINE_CHART_TYPE,
+  LineChartColumn,
 } from "./ChartColumn"
+import { BaseColumnProps, isErrorCell } from "./utils"
 
 const CHART_COLUMN_TEMPLATE = {
   id: "1",
@@ -32,12 +39,22 @@ const CHART_COLUMN_TEMPLATE = {
   isEditable: false,
   isHidden: false,
   isIndex: false,
+  isPinned: false,
   isStretched: false,
   arrowType: {
-    // The arrow type of the underlying data is
-    // not used for anything inside the column.
-    pandas_type: "object",
-    numpy_type: "list[float64]",
+    type: DataFrameCellType.DATA,
+    arrowField: new Field(
+      "chart_column",
+      new List(new Field("item", new Float64(), true)),
+      true
+    ),
+    pandasType: {
+      field_name: "chart_column",
+      name: "chart_column",
+      pandas_type: "object",
+      numpy_type: "list[float64]",
+      metadata: null,
+    },
   },
 } as BaseColumnProps
 
@@ -59,10 +76,19 @@ function getBarChartColumn(
   } as BaseColumnProps)
 }
 
+function getAreaChartColumn(
+  params?: ChartColumnParams
+): ReturnType<typeof AreaChartColumn> {
+  return AreaChartColumn({
+    ...CHART_COLUMN_TEMPLATE,
+    columnTypeOptions: params,
+  } as BaseColumnProps)
+}
+
 describe("ChartColumn", () => {
   it("creates a valid column instance", () => {
     const mockColumn = getLineChartColumn()
-    expect(mockColumn.kind).toEqual("line_chart")
+    expect(mockColumn.kind).toEqual(LINE_CHART_TYPE)
     expect(mockColumn.title).toEqual(CHART_COLUMN_TEMPLATE.title)
     expect(mockColumn.id).toEqual(CHART_COLUMN_TEMPLATE.id)
     expect(mockColumn.sortMode).toEqual("default")
@@ -84,17 +110,25 @@ describe("ChartColumn", () => {
 
   it("supports configuring the chart type", () => {
     const mockColumn = getLineChartColumn()
-    expect(mockColumn.kind).toEqual("line_chart")
+    expect(mockColumn.kind).toEqual(LINE_CHART_TYPE)
     const mockCell = mockColumn.getCell([0.1, 0.2, 0.3])
     // Default chart type is line
     expect((mockCell as SparklineCellType).data?.graphKind).toEqual("line")
 
     const mockBarChartColumn = getBarChartColumn()
-    expect(mockBarChartColumn.kind).toEqual("bar_chart")
+    expect(mockBarChartColumn.kind).toEqual(BAR_CHART_TYPE)
     const mockBarChartCell = mockBarChartColumn.getCell([0.1, 0.2, 0.3])
     // Chart type should be bar
     expect((mockBarChartCell as SparklineCellType).data?.graphKind).toEqual(
       "bar"
+    )
+
+    const mockAreaChartColumn = getAreaChartColumn()
+    expect(mockAreaChartColumn.kind).toEqual(AREA_CHART_TYPE)
+    const mockAreaChartCell = mockAreaChartColumn.getCell([0.1, 0.2, 0.3])
+    // Chart type should be area
+    expect((mockAreaChartCell as SparklineCellType).data?.graphKind).toEqual(
+      "area"
     )
   })
 
@@ -162,27 +196,6 @@ describe("ChartColumn", () => {
     const mockCell6 = mockColumn6.getCell([-100, 0, 100])
     // min and max need to be defined, so this should be an error cell:
     expect(isErrorCell(mockCell6)).toEqual(true)
-  })
-
-  it("returns empty cell if line chart with less than 3 values", () => {
-    // This is only a temporary workaround since the line chart rendering
-    // runs into an error if there are less than 3 values. This needs
-    // to be fixed in the glide-data-grid library.
-
-    const mockColumn = getLineChartColumn()
-
-    let mockCell = mockColumn.getCell([])
-    expect((mockCell as LoadingCell).kind).toEqual(GridCellKind.Loading)
-
-    mockCell = mockColumn.getCell([1])
-    expect((mockCell as LoadingCell).kind).toEqual(GridCellKind.Loading)
-
-    mockCell = mockColumn.getCell([1, 2])
-    expect((mockCell as LoadingCell).kind).toEqual(GridCellKind.Loading)
-
-    // Three items should work
-    mockCell = mockColumn.getCell([1, 2, 3])
-    expect((mockCell as SparklineCellType).kind).toEqual(GridCellKind.Custom)
   })
 
   it("works with single values or only same values without running into division by zero", () => {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
  */
 
 import { CancelToken } from "axios"
-import _ from "lodash"
+import isEqual from "lodash/isEqual"
 import { v4 as uuidv4 } from "uuid"
 
 import { IFileURLs, IFileURLsResponse } from "@streamlit/lib/src/proto"
+
 import { SessionInfo } from "./SessionInfo"
 import { StreamlitEndpoints } from "./StreamlitEndpoints"
 import { logWarning } from "./util/log"
@@ -95,7 +96,7 @@ export class FileUploadClient {
    * @param onUploadProgress: an optional function that will be called repeatedly with progress events during the upload.
    * @param cancelToken: an optional axios CancelToken that can be used to cancel the in-progress upload.
    *
-   * @return a Promise<number> that resolves with the file's unique ID, as assigned by the server.
+   * @return a Promise<void> that resolves with a void promise when the upload is complete.
    */
   public async uploadFile(
     widget: WidgetInfo,
@@ -207,7 +208,7 @@ export class FileUploadClient {
     }
 
     const newWidgetIds = this.getFormIdSet()
-    if (!_.isEqual(newWidgetIds, prevWidgetIds)) {
+    if (!isEqual(newWidgetIds, prevWidgetIds)) {
       this.pendingFormUploadsChanged(newWidgetIds)
     }
   }

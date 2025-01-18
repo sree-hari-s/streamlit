@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,27 @@
  * limitations under the License.
  */
 
-import ObjectColumn from "./ObjectColumn"
-import TextColumn from "./TextColumn"
+import {
+  AreaChartColumn,
+  BarChartColumn,
+  LineChartColumn,
+} from "./ChartColumn"
 import CheckboxColumn from "./CheckboxColumn"
-import SelectboxColumn from "./SelectboxColumn"
+import DateTimeColumn, { DateColumn, TimeColumn } from "./DateTimeColumn"
+import ImageColumn from "./ImageColumn"
+import LinkColumn from "./LinkColumn"
 import ListColumn from "./ListColumn"
 import NumberColumn from "./NumberColumn"
-import LinkColumn from "./LinkColumn"
-import ImageColumn from "./ImageColumn"
+import ObjectColumn from "./ObjectColumn"
 import ProgressColumn from "./ProgressColumn"
-import DateTimeColumn, { DateColumn, TimeColumn } from "./DateTimeColumn"
-import { LineChartColumn, BarChartColumn } from "./ChartColumn"
+import SelectboxColumn from "./SelectboxColumn"
+import TextColumn from "./TextColumn"
+import { ColumnCreator } from "./utils"
 
 export { ImageCellEditor } from "./cells/ImageCellEditor"
-
-import { ColumnCreator } from "./utils"
+export type { DateTimeColumnParams } from "./DateTimeColumn"
+export type { LinkColumnParams } from "./LinkColumn"
+export type { NumberColumnParams } from "./NumberColumn"
 
 export * from "./utils"
 
@@ -51,6 +57,7 @@ export const ColumnTypes = new Map<string, ColumnCreator>(
     time: TimeColumn,
     line_chart: LineChartColumn,
     bar_chart: BarChartColumn,
+    area_chart: AreaChartColumn,
     image: ImageColumn,
     progress: ProgressColumn,
   })
@@ -59,18 +66,19 @@ export const ColumnTypes = new Map<string, ColumnCreator>(
 export const CustomCells = []
 
 export {
-  ObjectColumn,
-  TextColumn,
+  AreaChartColumn,
+  BarChartColumn,
   CheckboxColumn,
-  SelectboxColumn,
+  DateColumn,
+  DateTimeColumn,
+  ImageColumn,
+  LineChartColumn,
+  LinkColumn,
   ListColumn,
   NumberColumn,
-  LinkColumn,
-  DateTimeColumn,
-  DateColumn,
-  TimeColumn,
-  LineChartColumn,
-  BarChartColumn,
-  ImageColumn,
+  ObjectColumn,
   ProgressColumn,
+  SelectboxColumn,
+  TextColumn,
+  TimeColumn,
 }

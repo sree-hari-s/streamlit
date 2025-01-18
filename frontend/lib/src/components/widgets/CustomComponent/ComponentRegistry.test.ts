@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 import { mockEndpoints } from "@streamlit/lib/src/mocks/mocks"
+
 import { ComponentRegistry } from "./ComponentRegistry"
 
 describe("ComponentRegistry", () => {
@@ -33,8 +34,8 @@ describe("ComponentRegistry", () => {
     // Create some mocks
     const msgSource1: any = {}
     const msgSource2: any = {}
-    const msgListener1 = jest.fn()
-    const msgListener2 = jest.fn()
+    const msgListener1 = vi.fn()
+    const msgListener2 = vi.fn()
 
     // This should not error (and will not be handled).
     onMessageEvent(new MessageEvent("message", { source: msgSource1 }))

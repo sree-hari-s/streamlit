@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,17 +15,19 @@
  */
 
 import React from "react"
-import { screen, fireEvent } from "@testing-library/react"
-import "@testing-library/jest-dom"
+
+import { screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
 import { render } from "@streamlit/lib/src/test_util"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
-
 import { Button as ButtonProto } from "@streamlit/lib/src/proto"
+
 import Button, { Props } from "./Button"
 
-jest.mock("@streamlit/lib/src/WidgetStateManager")
+vi.mock("@streamlit/lib/src/WidgetStateManager")
 
-const sendBackMsg = jest.fn()
+const sendBackMsg = vi.fn()
 
 const getProps = (
   elementProps: Partial<ButtonProto> = {},
@@ -58,7 +60,6 @@ describe("Button widget", () => {
 
     const stButtonDiv = screen.getByTestId("stButton")
 
-    expect(stButtonDiv).toHaveClass("row-widget")
     expect(stButtonDiv).toHaveClass("stButton")
     expect(stButtonDiv).toHaveStyle(`width: ${props.width}px`)
   })
@@ -75,16 +76,35 @@ describe("Button widget", () => {
   })
 
   describe("BaseButton props should work", () => {
-    it("onClick prop", () => {
+    it("onClick prop", async () => {
+      const user = userEvent.setup()
       const props = getProps()
       render(<Button {...props} />)
 
       const buttonWidget = screen.getByRole("button")
-      fireEvent.click(buttonWidget)
+      await user.click(buttonWidget)
 
       expect(props.widgetMgr.setTriggerValue).toHaveBeenCalledWith(
         props.element,
-        { fromUi: true }
+        { fromUi: true },
+        undefined
+      )
+    })
+
+    it("passes fragmentId to onClick prop", async () => {
+      const user = userEvent.setup()
+      const props = getProps(undefined, {
+        fragmentId: "myFragmentId",
+      })
+      render(<Button {...props} />)
+
+      const buttonWidget = screen.getByRole("button")
+      await user.click(buttonWidget)
+
+      expect(props.widgetMgr.setTriggerValue).toHaveBeenCalledWith(
+        props.element,
+        { fromUi: true },
+        "myFragmentId"
       )
     })
 

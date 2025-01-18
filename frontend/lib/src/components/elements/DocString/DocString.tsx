@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
  */
 
 import React, { ReactElement } from "react"
+
 import { DocString as DocStringProto, IMember } from "@streamlit/lib/src/proto"
+
 import {
   StyledDocContainer,
   StyledDocHeader,
@@ -24,9 +26,9 @@ import {
   StyledDocSummary,
   StyledDocType,
   StyledDocValue,
-  StyledMembersSummaryCell,
   StyledMembersDetailsCell,
   StyledMembersRow,
+  StyledMembersSummaryCell,
   StyledMembersTable,
 } from "./styled-components"
 
@@ -46,17 +48,25 @@ export default function DocString({
 
   // Put it all together into a nice little html view.
   return (
-    <StyledDocContainer width={width} data-testid="stDocstring">
+    <StyledDocContainer className="stHelp" data-testid="stHelp" width={width}>
       <StyledDocHeader>
         <StyledDocSummary>
-          {name ? <StyledDocName>{name}</StyledDocName> : null}
-          {type ? <StyledDocType>{type}</StyledDocType> : null}
-          {value ? <StyledDocValue>{value}</StyledDocValue> : null}
+          {name ? (
+            <StyledDocName data-testid="stHelpName">{name}</StyledDocName>
+          ) : null}
+          {type ? (
+            <StyledDocType data-testid="stHelpType">{type}</StyledDocType>
+          ) : null}
+          {value ? (
+            <StyledDocValue data-testid="stHelpValue">{value}</StyledDocValue>
+          ) : null}
         </StyledDocSummary>
       </StyledDocHeader>
-      <StyledDocString>{docString || "No docs available"}</StyledDocString>
+      <StyledDocString data-testid="stHelpDoc">
+        {docString || "No docs available"}
+      </StyledDocString>
       {members.length > 0 ? (
-        <StyledMembersTable>
+        <StyledMembersTable data-testid="stHelpMembersTable">
           {members.map(member => (
             <Member member={member} key={member.name} />
           ))}
@@ -75,17 +85,29 @@ export function Member({ member }: MemberProps): ReactElement {
   const { name, type, value, docString } = member
 
   return (
-    <StyledMembersRow>
+    <StyledMembersRow data-testid="stHelpMember">
       <StyledMembersSummaryCell>
-        {name ? <StyledDocName>{name}</StyledDocName> : null}
-        {type ? <StyledDocType>{type}</StyledDocType> : null}
+        {name ? (
+          <StyledDocName data-testid="stHelpMemberDocName">
+            {name}
+          </StyledDocName>
+        ) : null}
+        {type ? (
+          <StyledDocType data-testid="stHelpMemberDocType">
+            {type}
+          </StyledDocType>
+        ) : null}
       </StyledMembersSummaryCell>
 
       <StyledMembersDetailsCell>
         {value ? (
-          <StyledDocValue>{value}</StyledDocValue>
+          <StyledDocValue data-testid="stHelpMemberDocValue">
+            {value}
+          </StyledDocValue>
         ) : (
-          <StyledDocValue>{docString || "No docs available"}</StyledDocValue>
+          <StyledDocValue data-testid="stHelpMemberDocString">
+            {docString || "No docs available"}
+          </StyledDocValue>
         )}
       </StyledMembersDetailsCell>
     </StyledMembersRow>

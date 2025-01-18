@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
 
 import unittest
 from pathlib import Path
@@ -47,7 +49,7 @@ class PageHelperFunctionTests(unittest.TestCase):
         with pytest.raises(AssertionError) as e:
             source_util.page_sort_key(Path("/foo/bar/baz.rs"))
 
-        assert str(e.value) == "/foo/bar/baz.rs is not a Python file"
+        assert str(e.value) == f"{Path('/foo/bar/baz.rs')} is not a Python file"
 
     @parameterized.expand(
         [
@@ -103,7 +105,8 @@ class PageHelperFunctionTests(unittest.TestCase):
 
     @patch("streamlit.source_util._on_pages_changed", MagicMock())
     def test_register_pages_changed_callback(self):
-        callback = lambda: None
+        def callback():
+            return None
 
         disconnect = source_util.register_pages_changed_callback(callback)
 
@@ -178,7 +181,3 @@ def test_get_pages(tmpdir):
             "icon": "",
         },
     }
-
-    # Assert address-equality to verify the cache is used the second time
-    # get_pages is called.
-    assert source_util.get_pages(main_script_path) is received_pages

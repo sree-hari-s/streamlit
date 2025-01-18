@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,15 @@
  * limitations under the License.
  */
 
-import { ICustomThemeConfig, IAppPage } from "@streamlit/lib/src/proto"
+import {
+  IAppPage,
+  ICustomThemeConfig,
+  MetricsEvent,
+} from "@streamlit/lib/src/proto"
 import { ExportedTheme } from "@streamlit/lib/src/theme"
 import { ScriptRunState } from "@streamlit/lib/src/ScriptRunState"
+import { LibConfig } from "@streamlit/lib/src/components/core/LibContext"
+import { PresetThemeName } from "@streamlit/lib/src/theme/types"
 
 export type DeployedAppMetadata = {
   hostedAt?: string
@@ -54,6 +60,10 @@ export type IHostToGuestMessage = {
   | {
       type: "REQUEST_PAGE_CHANGE"
       pageScriptHash: string
+    }
+  | {
+      type: "SET_INPUTS_DISABLED"
+      disabled: boolean
     }
   | {
       type: "SET_AUTH_TOKEN"
@@ -106,13 +116,26 @@ export type IHostToGuestMessage = {
     }
   | {
       type: "SET_CUSTOM_THEME_CONFIG"
-      themeInfo: ICustomThemeConfig
+      themeName?: PresetThemeName
+      // TODO: Consider removing themeInfo once stakeholders no longer use it
+      themeInfo?: ICustomThemeConfig
+    }
+  | {
+      type: "SEND_APP_HEARTBEAT"
+    }
+  | {
+      type: "RESTART_WEBSOCKET_CONNECTION"
+    }
+  | {
+      type: "TERMINATE_WEBSOCKET_CONNECTION"
     }
 )
 
 export type IGuestToHostMessage =
   | {
       type: "GUEST_READY"
+      streamlitExecutionStartedAt: number
+      guestReadyAt: number
     }
   | {
       type: "MENU_ITEM_CALLBACK"
@@ -155,12 +178,75 @@ export type IGuestToHostMessage =
       type: "SCRIPT_RUN_STATE_CHANGED"
       scriptRunState: ScriptRunState
     }
+  | {
+      type: "REDIRECT_TO_URL"
+      url: string
+    }
+  | {
+      type: "CUSTOM_PARENT_MESSAGE"
+      message: string
+    }
+  | {
+      type: "WEBSOCKET_DISCONNECTED"
+      attemptingToReconnect: boolean
+      // TODO(vdonato): Maybe provide a reason the disconnect happened. This
+      // could either be a WS disconnect code or a flag signifying the host
+      // requested this websocket disconnect.
+    }
+  | {
+      type: "WEBSOCKET_CONNECTED"
+    }
+  | {
+      type: "METRICS_EVENT"
+      eventName: string
+      data: MetricsEvent
+    }
 
 export type VersionedMessage<Message> = {
   stCommVersion: number
 } & Message
 
-export type IAllowedMessageOriginsResponse = {
-  allowedOrigins: string[]
-  useExternalAuthToken: boolean
+/**
+ * The app config contains various configurations that the host platform can
+ * use to configure streamlit-app frontend behavior. This should to be treated as part of the public
+ * API, and changes need to be backwards-compatible meaning that an old host configuration
+ * should still work with a new frontend versions.
+ *
+ * TODO(lukasmasuch): Potentially refactor HostCommunicationManager and move this type
+ * to AppContext.tsx.
+ */
+export type AppConfig = {
+  /**
+   * A list of origins that we're allowed to receive cross-iframe messages
+   * from via the browser's window.postMessage API.
+   */
+  allowedOrigins?: string[]
+  /**
+   * Whether to wait until we've received a SET_AUTH_TOKEN message before
+   * resolving deferredAuthToken.promise. The WebsocketConnection class waits
+   * for this promise to resolve before attempting to establish a connection
+   * with the Streamlit server.
+   */
+  useExternalAuthToken?: boolean
+  /**
+   * Enables custom string messages to be sent to the host
+   */
+  enableCustomParentMessages?: boolean
 }
+
+export type MetricsConfig = {
+  /**
+   * URL to send metrics data to via POST request.
+   * Setting to "postMessage" sends metrics events via postMessage to host.
+   * Setting to "off" disables metrics collection.
+   * If undefined, metricsUrl requested from centralized config file.
+   */
+  metricsUrl?: string | "postMessage" | "off"
+}
+
+/**
+ * The response structure of the `_stcore/host-config` endpoint.
+ * This combines streamlit-lib specific configuration options with
+ * streamlit-app specific options (e.g. allowed message origins).
+ */
+export type IHostConfigResponse = LibConfig & AppConfig & MetricsConfig

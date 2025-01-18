@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,12 @@
  */
 
 import { BooleanCell, GridCellKind } from "@glideapps/glide-data-grid"
+import { Bool, Field } from "apache-arrow"
 
-import { isErrorCell } from "./utils"
+import { DataFrameCellType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
+
 import CheckboxColumn from "./CheckboxColumn"
+import { isErrorCell } from "./utils"
 
 const MOCK_CHECKBOX_COLUMN_PROPS = {
   id: "1",
@@ -27,12 +30,18 @@ const MOCK_CHECKBOX_COLUMN_PROPS = {
   isEditable: false,
   isHidden: false,
   isIndex: false,
+  isPinned: false,
   isStretched: false,
   arrowType: {
-    // The arrow type of the underlying data is
-    // not used for anything inside the column.
-    pandas_type: "bool",
-    numpy_type: "bool",
+    type: DataFrameCellType.DATA,
+    arrowField: new Field("checkbox_column", new Bool(), true),
+    pandasType: {
+      field_name: "checkbox_column",
+      name: "checkbox_column",
+      pandas_type: "bool",
+      numpy_type: "bool",
+      metadata: null,
+    },
   },
 }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,17 @@
  * limitations under the License.
  */
 
-export { colors } from "./colors"
 export { breakpoints } from "./breakpoints"
-export {
-  fonts,
-  fontSizes,
-  fontWeights,
-  genericFonts,
-  lineHeights,
-  letterSpacings,
-} from "./typography"
+export { colors } from "./colors"
+export { iconSizes } from "./iconSizes"
 export { radii } from "./radii"
 export { sizes } from "./sizes"
 export { spacing } from "./spacing"
+export {
+  fontSizes,
+  fontWeights,
+  fonts,
+  genericFonts,
+  lineHeights,
+} from "./typography"
 export { zIndices } from "./zIndices"
-export { iconSizes } from "./iconSizes"

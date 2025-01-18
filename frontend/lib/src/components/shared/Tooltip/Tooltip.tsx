@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,16 @@
  * limitations under the License.
  */
 
-import React, { ReactElement, ReactNode } from "react"
+import React, { ReactElement, ReactNode, useRef } from "react"
+
 import { useTheme } from "@emotion/react"
+import { ACCESSIBILITY_TYPE, PLACEMENT, StatefulTooltip } from "baseui/tooltip"
+
 import {
   EmotionTheme,
   hasLightBackgroundColor,
 } from "@streamlit/lib/src/theme"
-import { StatefulTooltip, ACCESSIBILITY_TYPE, PLACEMENT } from "baseui/tooltip"
+
 import { StyledTooltipContentWrapper } from "./styled-components"
 
 export enum Placement {
@@ -45,6 +48,7 @@ export interface TooltipProps {
   children: ReactNode
   inline?: boolean
   style?: React.CSSProperties
+  onMouseEnterDelay?: number
 }
 
 function Tooltip({
@@ -53,15 +57,58 @@ function Tooltip({
   children,
   inline,
   style,
+  onMouseEnterDelay,
 }: TooltipProps): ReactElement {
   const theme: EmotionTheme = useTheme()
-  const { colors, fontSizes, radii } = theme
+  const { colors, fontSizes, radii, fontWeights } = theme
+
+  const tooltipRef = useRef<HTMLDivElement>(null)
 
   return (
     <StatefulTooltip
+      onOpen={() => {
+        const parentElement = tooltipRef.current?.parentElement
+        if (!parentElement) {
+          return
+        }
+        // if the tooltip is offscreen to the left, move it to the right by the same amount of pixels
+        // use a timeout to that parentElement.getBoundingClientRect returns the correct value; otherwise
+        // I have observed it to be "0".
+        setTimeout(() => {
+          const boundingClientRect = parentElement.getBoundingClientRect()
+          const xCoordinate = boundingClientRect.x
+
+          const overflowRight =
+            xCoordinate + boundingClientRect.width - window.innerWidth
+
+          // this is the out-of-tree Basweb DOM structure. For the right overflow,
+          // this is the element that has the transform-style property set that needs
+          // to be modified.
+          const parentsParentElement = parentElement.parentElement
+
+          if (overflowRight > 0 && parentsParentElement) {
+            // Baseweb uses a transform to position the tooltip, so we need to adjust the transform instead
+            // of the left / right property, otherwise it looks weird when the tooltip overflows the right side
+            const transformStyleMatrix = new DOMMatrix(
+              window.getComputedStyle(parentsParentElement)?.transform
+            )
+            parentsParentElement.style.transform = `translate3d(${
+              transformStyleMatrix.e - overflowRight
+            }px, ${transformStyleMatrix.f}px, 0px)`
+          }
+
+          if (xCoordinate < 0) {
+            parentElement.style.left = `${-xCoordinate}px`
+          }
+        }, 0)
+      }}
       content={
         content ? (
-          <StyledTooltipContentWrapper className="stTooltipContent">
+          <StyledTooltipContentWrapper
+            className="stTooltipContent"
+            data-testid="stTooltipContent"
+            ref={tooltipRef}
+          >
             {content}
           </StyledTooltipContentWrapper>
         ) : null
@@ -70,6 +117,7 @@ function Tooltip({
       accessibilityType={ACCESSIBILITY_TYPE.tooltip}
       showArrow={false}
       popoverMargin={10}
+      onMouseEnterDelay={onMouseEnterDelay}
       overrides={{
         Body: {
           style: {
@@ -77,10 +125,10 @@ function Tooltip({
             // shorthand version `borderRadius` is used here since the long
             // names are used by BaseWeb and mixing the two is apparently
             // bad :(
-            borderTopLeftRadius: radii.md,
-            borderTopRightRadius: radii.md,
-            borderBottomLeftRadius: radii.md,
-            borderBottomRightRadius: radii.md,
+            borderTopLeftRadius: radii.default,
+            borderTopRightRadius: radii.default,
+            borderBottomLeftRadius: radii.default,
+            borderBottomRightRadius: radii.default,
 
             paddingTop: "0 !important",
             paddingBottom: "0 !important",
@@ -97,7 +145,7 @@ function Tooltip({
               : colors.secondaryBg,
             color: colors.bodyText,
             fontSize: fontSizes.sm,
-            fontWeight: "normal",
+            fontWeight: fontWeights.normal,
 
             // See the long comment about `borderRadius`. The same applies here
             // to `padding`.
@@ -117,7 +165,8 @@ function Tooltip({
           justifyContent: inline ? "flex-end" : "",
           ...style,
         }}
-        data-testid="tooltipHoverTarget"
+        data-testid="stTooltipHoverTarget"
+        className="stTooltipHoverTarget"
       >
         {children}
       </div>

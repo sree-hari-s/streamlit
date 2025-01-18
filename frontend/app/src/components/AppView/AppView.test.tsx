@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,32 +15,46 @@
  */
 
 import React from "react"
-import "@testing-library/jest-dom"
-import { screen } from "@testing-library/react"
+
+import { screen, within } from "@testing-library/react"
+
+import {
+  AppRoot,
+  BlockNode,
+  Block as BlockProto,
+  ComponentRegistry,
+  createFormsData,
+  Element,
+  ElementNode,
+  FileUploadClient,
+  ForwardMsgMetadata,
+  Logo as LogoProto,
+  makeElementWithInfoText,
+  mockEndpoints,
+  mockSessionInfo,
+  PageConfig,
+  render,
+  ScriptRunState,
+  WidgetStateManager,
+} from "@streamlit/lib"
 import {
   AppContext,
   Props as AppContextProps,
 } from "@streamlit/app/src/components/AppContext"
-import {
-  ScriptRunState,
-  BlockNode,
-  ElementNode,
-  AppRoot,
-  FileUploadClient,
-  createFormsData,
-  WidgetStateManager,
-  ChatInput as ChatInputProto,
-  ForwardMsgMetadata,
-  PageConfig,
-  Element,
-  makeElementWithInfoText,
-  ComponentRegistry,
-  mockEndpoints,
-  mockSessionInfo,
-  render,
-  Block as BlockProto,
-} from "@streamlit/lib"
+
 import AppView, { AppViewProps } from "./AppView"
+
+// Mock needed for Block.tsx
+class ResizeObserver {
+  observe(): void {}
+
+  unobserve(): void {}
+
+  disconnect(): void {}
+}
+window.ResizeObserver = ResizeObserver
+
+const FAKE_SCRIPT_HASH = "fake_script_hash"
 
 function getContextOutput(context: Partial<AppContextProps>): AppContextProps {
   return {
@@ -49,58 +63,61 @@ function getContextOutput(context: Partial<AppContextProps>): AppContextProps {
     embedded: false,
     showPadding: false,
     disableScrolling: false,
-    showFooter: false,
     showToolbar: false,
     showColoredLine: false,
     pageLinkBaseUrl: "",
     sidebarChevronDownshift: 0,
-    toastAdjustment: false,
     ...context,
   }
 }
+
+const mockEndpointProp = mockEndpoints()
 
 function getProps(props: Partial<AppViewProps> = {}): AppViewProps {
   const formsData = createFormsData()
 
   const sessionInfo = mockSessionInfo()
-  const endpoints = mockEndpoints()
 
   return {
-    endpoints: endpoints,
-    elements: AppRoot.empty(),
-    sendMessageToHost: jest.fn(),
-    sessionInfo: sessionInfo,
+    endpoints: mockEndpointProp,
+    elements: AppRoot.empty(FAKE_SCRIPT_HASH, true),
+    sendMessageToHost: vi.fn(),
     scriptRunId: "script run 123",
     scriptRunState: ScriptRunState.NOT_RUNNING,
     widgetMgr: new WidgetStateManager({
-      sendRerunBackMsg: jest.fn(),
-      formsDataChanged: jest.fn(),
+      sendRerunBackMsg: vi.fn(),
+      formsDataChanged: vi.fn(),
     }),
     uploadClient: new FileUploadClient({
-      sessionInfo: sessionInfo,
-      endpoints: endpoints,
+      sessionInfo,
+      endpoints: mockEndpointProp,
       formsWithPendingRequestsChanged: () => {},
-      requestFileURLs: jest.fn(),
+      requestFileURLs: vi.fn(),
     }),
     widgetsDisabled: true,
-    componentRegistry: new ComponentRegistry(endpoints),
+    componentRegistry: new ComponentRegistry(mockEndpointProp),
     formsData,
+    appLogo: null,
     appPages: [{ pageName: "streamlit_app", pageScriptHash: "page_hash" }],
-    onPageChange: jest.fn(),
+    navSections: [],
+    onPageChange: vi.fn(),
     currentPageScriptHash: "main_page_script_hash",
     hideSidebarNav: false,
+    expandSidebarNav: false,
     ...props,
   }
 }
 
 describe("AppView element", () => {
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
   })
 
   it("renders without crashing", () => {
     render(<AppView {...getProps()} />)
-    expect(screen.getByTestId("stAppViewContainer")).toBeInTheDocument()
+    const appViewContainer = screen.getByTestId("stAppViewContainer")
+    expect(appViewContainer).toBeInTheDocument()
+    expect(appViewContainer).toHaveClass("stAppViewContainer")
   })
 
   it("does not render a sidebar when there are no elements and only one page", () => {
@@ -115,19 +132,37 @@ describe("AppView element", () => {
     const sidebarElement = new ElementNode(
       makeElementWithInfoText("sidebar!"),
       ForwardMsgMetadata.create({}),
-      "no script run id"
+      "no script run id",
+      FAKE_SCRIPT_HASH
     )
 
     const sidebar = new BlockNode(
+      FAKE_SCRIPT_HASH,
       [sidebarElement],
       new BlockProto({ allowEmpty: true })
     )
 
-    const main = new BlockNode([], new BlockProto({ allowEmpty: true }))
-    const event = new BlockNode([], new BlockProto({ allowEmpty: true }))
+    const main = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const event = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const bottom = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
 
     const props = getProps({
-      elements: new AppRoot(new BlockNode([main, sidebar, event])),
+      elements: new AppRoot(
+        FAKE_SCRIPT_HASH,
+        new BlockNode(FAKE_SCRIPT_HASH, [main, sidebar, event, bottom])
+      ),
     })
     render(<AppView {...props} />)
 
@@ -146,27 +181,56 @@ describe("AppView element", () => {
     expect(sidebarDOMElement).toBeInTheDocument()
   })
 
+  it("does not render a sidebar when there are no elements, multiple pages, and hideSidebarNav is true", () => {
+    const appPages = [
+      { pageName: "streamlit_app", pageScriptHash: "page_hash" },
+      { pageName: "streamlit_app2", pageScriptHash: "page_hash2" },
+    ]
+    render(<AppView {...getProps({ appPages, hideSidebarNav: true })} />)
+
+    const sidebar = screen.queryByTestId("stSidebar")
+    expect(sidebar).not.toBeInTheDocument()
+  })
+
   it("renders a sidebar when there are elements and multiple pages", () => {
     const sidebarElement = new ElementNode(
       makeElementWithInfoText("sidebar!"),
       ForwardMsgMetadata.create({}),
-      "no script run id"
+      "no script run id",
+      FAKE_SCRIPT_HASH
     )
 
     const sidebar = new BlockNode(
+      FAKE_SCRIPT_HASH,
       [sidebarElement],
       new BlockProto({ allowEmpty: true })
     )
 
-    const main = new BlockNode([], new BlockProto({ allowEmpty: true }))
-    const event = new BlockNode([], new BlockProto({ allowEmpty: true }))
+    const main = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const event = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const bottom = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
 
     const appPages = [
       { pageName: "streamlit_app", pageScriptHash: "page_hash" },
       { pageName: "streamlit_app2", pageScriptHash: "page_hash2" },
     ]
     const props = getProps({
-      elements: new AppRoot(new BlockNode([main, sidebar, event])),
+      elements: new AppRoot(
+        FAKE_SCRIPT_HASH,
+        new BlockNode(FAKE_SCRIPT_HASH, [main, sidebar, event, bottom])
+      ),
       appPages,
     })
     render(<AppView {...props} />)
@@ -192,7 +256,7 @@ describe("AppView element", () => {
 
   it("does not render the wide class", () => {
     const realUseContext = React.useContext
-    jest.spyOn(React, "useContext").mockImplementation(input => {
+    vi.spyOn(React, "useContext").mockImplementation(input => {
       if (input === AppContext) {
         return getContextOutput({ wideMode: false, embedded: false })
       }
@@ -200,24 +264,44 @@ describe("AppView element", () => {
       return realUseContext(input)
     })
 
-    const main = new BlockNode([], new BlockProto({ allowEmpty: true }))
-    const sidebar = new BlockNode([], new BlockProto({ allowEmpty: true }))
-    const event = new BlockNode([], new BlockProto({ allowEmpty: true }))
+    const main = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const sidebar = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const event = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const bottom = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
 
     const props = getProps({
-      elements: new AppRoot(new BlockNode([main, sidebar, event])),
+      elements: new AppRoot(
+        FAKE_SCRIPT_HASH,
+        new BlockNode(FAKE_SCRIPT_HASH, [main, sidebar, event, bottom])
+      ),
     })
     render(<AppView {...props} />)
 
     const style = window.getComputedStyle(
-      screen.getByTestId("block-container")
+      screen.getByTestId("stMainBlockContainer")
     )
     expect(style.maxWidth).not.toEqual("initial")
   })
 
   it("does render the wide class when specified", () => {
     const realUseContext = React.useContext
-    jest.spyOn(React, "useContext").mockImplementation(input => {
+    vi.spyOn(React, "useContext").mockImplementation(input => {
       if (input === AppContext) {
         return getContextOutput({ wideMode: true, embedded: false })
       }
@@ -226,48 +310,185 @@ describe("AppView element", () => {
     })
     render(<AppView {...getProps()} />)
     const style = window.getComputedStyle(
-      screen.getByTestId("block-container")
+      screen.getByTestId("stMainBlockContainer")
     )
     expect(style.maxWidth).toEqual("initial")
   })
 
-  it("opens link to streamlit.io in new tab", () => {
-    render(<AppView {...getProps()} />)
-    const link = screen.getByRole("link", { name: "Streamlit" })
-    expect(link).toHaveAttribute("href", "//streamlit.io")
-    expect(link).toHaveAttribute("target", "_blank")
-  })
+  describe("handles padding an embedded app", () => {
+    it("embedded triggers default padding", () => {
+      const realUseContext = React.useContext
+      vi.spyOn(React, "useContext").mockImplementation(input => {
+        if (input === AppContext) {
+          return getContextOutput({ embedded: true })
+        }
 
-  it("renders the Spacer and Footer when not embedded", () => {
-    const realUseContext = React.useContext
-    jest.spyOn(React, "useContext").mockImplementation(input => {
-      if (input === AppContext) {
-        return getContextOutput({ wideMode: false, embedded: false })
-      }
-
-      return realUseContext(input)
+        return realUseContext(input)
+      })
+      render(<AppView {...getProps()} />)
+      const style = window.getComputedStyle(
+        screen.getByTestId("stMainBlockContainer")
+      )
+      expect(style.paddingTop).toEqual("2.1rem")
+      expect(style.paddingBottom).toEqual("1rem")
     })
 
-    render(<AppView {...getProps()} />)
+    it("showPadding triggers expected padding", () => {
+      const realUseContext = React.useContext
+      vi.spyOn(React, "useContext").mockImplementation(input => {
+        if (input === AppContext) {
+          return getContextOutput({ showPadding: true })
+        }
 
-    expect(screen.getByTestId("AppViewBlockSpacer")).toBeInTheDocument()
-    expect(screen.getByRole("contentinfo")).toBeInTheDocument()
-  })
-
-  it("does not render the Spacer and Footer when embedded", () => {
-    const realUseContext = React.useContext
-    jest.spyOn(React, "useContext").mockImplementation(input => {
-      if (input === AppContext) {
-        return getContextOutput({ wideMode: false, embedded: true })
-      }
-
-      return realUseContext(input)
+        return realUseContext(input)
+      })
+      render(<AppView {...getProps()} />)
+      const style = window.getComputedStyle(
+        screen.getByTestId("stMainBlockContainer")
+      )
+      expect(style.paddingTop).toEqual("6rem")
+      expect(style.paddingBottom).toEqual("10rem")
     })
 
-    render(<AppView {...getProps()} />)
+    it("showToolbar triggers expected top padding", () => {
+      const realUseContext = React.useContext
+      vi.spyOn(React, "useContext").mockImplementation(input => {
+        if (input === AppContext) {
+          return getContextOutput({ showToolbar: true })
+        }
 
-    expect(screen.queryByTestId("AppViewBlockSpacer")).not.toBeInTheDocument()
-    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument()
+        return realUseContext(input)
+      })
+      render(<AppView {...getProps()} />)
+      const style = window.getComputedStyle(
+        screen.getByTestId("stMainBlockContainer")
+      )
+      expect(style.paddingTop).toEqual("4.5rem")
+      expect(style.paddingBottom).toEqual("1rem")
+    })
+
+    it("hasSidebar triggers expected top padding", () => {
+      const realUseContext = React.useContext
+      vi.spyOn(React, "useContext").mockImplementation(input => {
+        if (input === AppContext) {
+          return getContextOutput({ embedded: true })
+        }
+
+        return realUseContext(input)
+      })
+
+      const sidebarElement = new ElementNode(
+        makeElementWithInfoText("sidebar!"),
+        ForwardMsgMetadata.create({}),
+        "no script run id",
+        FAKE_SCRIPT_HASH
+      )
+
+      const sidebar = new BlockNode(
+        FAKE_SCRIPT_HASH,
+        [sidebarElement],
+        new BlockProto({ allowEmpty: true })
+      )
+
+      const empty = new BlockNode(
+        FAKE_SCRIPT_HASH,
+        [],
+        new BlockProto({ allowEmpty: true })
+      )
+
+      const props = getProps({
+        elements: new AppRoot(
+          FAKE_SCRIPT_HASH,
+          new BlockNode(FAKE_SCRIPT_HASH, [empty, sidebar, empty, empty])
+        ),
+      })
+
+      render(<AppView {...props} />)
+      const style = window.getComputedStyle(
+        screen.getByTestId("stMainBlockContainer")
+      )
+      expect(style.paddingTop).toEqual("4.5rem")
+      expect(style.paddingBottom).toEqual("1rem")
+    })
+  })
+
+  describe("handles logo rendering with no sidebar", () => {
+    const imageOnly = LogoProto.create({
+      image:
+        "https://global.discourse-cdn.com/business7/uploads/streamlit/original/2X/8/8cb5b6c0e1fe4e4ebfd30b769204c0d30c332fec.png",
+    })
+
+    const imageWithLink = LogoProto.create({
+      image:
+        "https://global.discourse-cdn.com/business7/uploads/streamlit/original/2X/8/8cb5b6c0e1fe4e4ebfd30b769204c0d30c332fec.png",
+      link: "www.example.com",
+    })
+
+    const imageWithSize = LogoProto.create({
+      image:
+        "https://global.discourse-cdn.com/business7/uploads/streamlit/original/2X/8/8cb5b6c0e1fe4e4ebfd30b769204c0d30c332fec.png",
+      size: "large",
+    })
+
+    const fullAppLogo = LogoProto.create({
+      image:
+        "https://global.discourse-cdn.com/business7/uploads/streamlit/original/2X/8/8cb5b6c0e1fe4e4ebfd30b769204c0d30c332fec.png",
+      link: "www.example.com",
+      iconImage: "https://docs.streamlit.io/logo.svg",
+    })
+
+    it("doesn't render if no logo provided", () => {
+      render(<AppView {...getProps()} />)
+      expect(screen.queryByTestId("stLogo")).not.toBeInTheDocument()
+    })
+
+    it("uses iconImage if provided", () => {
+      const sourceSpy = vi.spyOn(mockEndpointProp, "buildMediaURL")
+      render(<AppView {...getProps({ appLogo: fullAppLogo })} />)
+      const openSidebarContainer = screen.getByTestId(
+        "stSidebarCollapsedControl"
+      )
+      expect(openSidebarContainer).toBeInTheDocument()
+      const collapsedLogo = within(openSidebarContainer).getByTestId("stLogo")
+      expect(collapsedLogo).toBeInTheDocument()
+      expect(sourceSpy).toHaveBeenCalledWith(
+        "https://docs.streamlit.io/logo.svg"
+      )
+      expect(collapsedLogo).toHaveClass("stLogo")
+    })
+
+    it("defaults to image if no iconImage", () => {
+      const sourceSpy = vi.spyOn(mockEndpointProp, "buildMediaURL")
+      render(<AppView {...getProps({ appLogo: imageOnly })} />)
+      const openSidebarContainer = screen.getByTestId(
+        "stSidebarCollapsedControl"
+      )
+      expect(openSidebarContainer).toBeInTheDocument()
+      const collapsedLogo = within(openSidebarContainer).getByTestId("stLogo")
+      expect(collapsedLogo).toBeInTheDocument()
+      expect(sourceSpy).toHaveBeenCalledWith(
+        "https://global.discourse-cdn.com/business7/uploads/streamlit/original/2X/8/8cb5b6c0e1fe4e4ebfd30b769204c0d30c332fec.png"
+      )
+    })
+
+    it("default no link with image size medium", () => {
+      render(<AppView {...getProps({ appLogo: imageOnly })} />)
+      expect(screen.queryByTestId("stLogoLink")).not.toBeInTheDocument()
+      expect(screen.getByTestId("stLogo")).toHaveStyle({ height: "1.5rem" })
+    })
+
+    it("link with image if provided", () => {
+      render(<AppView {...getProps({ appLogo: imageWithLink })} />)
+      expect(screen.getByTestId("stLogoLink")).toHaveAttribute(
+        "href",
+        "www.example.com"
+      )
+    })
+
+    it("renders logo - large size when specified", () => {
+      render(<AppView {...getProps({ appLogo: imageWithSize })} />)
+      expect(screen.getByTestId("stLogo")).toHaveStyle({ height: "2rem" })
+    })
   })
 
   describe("when window.location.hash changes", () => {
@@ -276,7 +497,7 @@ describe("AppView element", () => {
     afterEach(() => (window.location = originalLocation))
 
     it("sends UPDATE_HASH message to host", () => {
-      const sendMessageToHost = jest.fn()
+      const sendMessageToHost = vi.fn()
       render(<AppView {...getProps({ sendMessageToHost })} />)
 
       window.location.hash = "mock_hash"
@@ -288,15 +509,15 @@ describe("AppView element", () => {
     })
   })
 
-  it("does not render a Scroll To Bottom container when no chat input is present", () => {
+  it("does not render a Scroll To Bottom container when no bottom container is present", () => {
     const props = getProps()
     render(<AppView {...props} />)
 
-    const stbContainer = screen.queryByTestId("ScrollToBottomContainer")
+    const stbContainer = screen.queryByTestId("stAppScrollToBottomContainer")
     expect(stbContainer).not.toBeInTheDocument()
   })
 
-  it("renders a Scroll To Bottom container when a chat input is present", () => {
+  it("renders a Scroll To Bottom container if there is an element in the bottom container.", () => {
     const chatInputElement = new ElementNode(
       new Element({
         chatInput: {
@@ -304,27 +525,44 @@ describe("AppView element", () => {
           placeholder: "Enter Text Here",
           disabled: false,
           default: "",
-          position: ChatInputProto.Position.BOTTOM,
         },
       }),
       ForwardMsgMetadata.create({}),
-      "no script run id"
+      "no script run id",
+      FAKE_SCRIPT_HASH
     )
 
-    const sidebar = new BlockNode([], new BlockProto({ allowEmpty: true }))
-    const event = new BlockNode([], new BlockProto({ allowEmpty: true }))
-
     const main = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const sidebar = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const event = new BlockNode(
+      FAKE_SCRIPT_HASH,
+      [],
+      new BlockProto({ allowEmpty: true })
+    )
+    const bottom = new BlockNode(
+      FAKE_SCRIPT_HASH,
       [chatInputElement],
       new BlockProto({ allowEmpty: true })
     )
+
     const props = getProps({
-      elements: new AppRoot(new BlockNode([main, sidebar, event])),
+      elements: new AppRoot(
+        FAKE_SCRIPT_HASH,
+        new BlockNode(FAKE_SCRIPT_HASH, [main, sidebar, event, bottom])
+      ),
     })
 
     render(<AppView {...props} />)
 
-    const stbContainer = screen.queryByTestId("ScrollToBottomContainer")
+    const stbContainer = screen.queryByTestId("stAppScrollToBottomContainer")
     expect(stbContainer).toBeInTheDocument()
   })
 })

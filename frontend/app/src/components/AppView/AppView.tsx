@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,33 +17,41 @@
 import React, { ReactElement } from "react"
 
 import {
-  IAppPage,
-  VerticalBlock,
-  ScriptRunState,
-  FormsData,
-  WidgetStateManager,
-  FileUploadClient,
-  ComponentRegistry,
-  BlockNode,
   AppRoot,
-  SessionInfo,
+  BlockNode,
+  ComponentRegistry,
+  FileUploadClient,
+  FormsData,
+  IAppPage,
   IGuestToHostMessage,
+  LibContext,
+  Logo,
+  Profiler,
+  ScriptRunState,
   StreamlitEndpoints,
+  VerticalBlock,
+  WidgetStateManager,
 } from "@streamlit/lib"
-
 import { ThemedSidebar } from "@streamlit/app/src/components/Sidebar"
 import EventContainer from "@streamlit/app/src/components/EventContainer"
-
+import {
+  StyledLogo,
+  StyledLogoLink,
+  StyledSidebarOpenContainer,
+} from "@streamlit/app/src/components/Sidebar/styled-components"
 import { AppContext } from "@streamlit/app/src/components/AppContext"
 
 import {
   StyledAppViewBlockContainer,
-  StyledAppViewContainer,
-  StyledAppViewFooter,
-  StyledAppViewFooterLink,
-  StyledAppViewMain,
-  StyledIFrameResizerAnchor,
   StyledAppViewBlockSpacer,
+  StyledAppViewContainer,
+  StyledAppViewMain,
+  StyledBottomBlockContainer,
+  StyledEventBlockContainer,
+  StyledIFrameResizerAnchor,
+  StyledInnerBottomContainer,
+  StyledSidebarBlockContainer,
+  StyledStickyBottomContainer,
 } from "./styled-components"
 import ScrollToBottomContainer from "./ScrollToBottomContainer"
 
@@ -51,8 +59,6 @@ export interface AppViewProps {
   elements: AppRoot
 
   endpoints: StreamlitEndpoints
-
-  sessionInfo: SessionInfo
 
   sendMessageToHost: (message: IGuestToHostMessage) => void
 
@@ -72,13 +78,19 @@ export interface AppViewProps {
 
   formsData: FormsData
 
+  appLogo: Logo | null
+
   appPages: IAppPage[]
+
+  navSections: string[]
 
   onPageChange: (pageName: string) => void
 
   currentPageScriptHash: string
 
   hideSidebarNav: boolean
+
+  expandSidebarNav: boolean
 }
 
 /**
@@ -87,7 +99,6 @@ export interface AppViewProps {
 function AppView(props: AppViewProps): ReactElement {
   const {
     elements,
-    sessionInfo,
     scriptRunId,
     scriptRunState,
     widgetMgr,
@@ -95,23 +106,16 @@ function AppView(props: AppViewProps): ReactElement {
     uploadClient,
     componentRegistry,
     formsData,
+    appLogo,
     appPages,
+    navSections,
     onPageChange,
     currentPageScriptHash,
+    expandSidebarNav,
     hideSidebarNav,
     sendMessageToHost,
     endpoints,
   } = props
-
-  // TODO: This works for scroll to bottom, but we will need
-  // to revisit this when we support multiple position options
-  const containsChatInput =
-    Array.from(elements.main.getElements()).find(element => {
-      return element.type === "chatInput"
-    }) !== undefined
-  const Component = containsChatInput
-    ? ScrollToBottomContainer
-    : StyledAppViewMain
 
   React.useEffect(() => {
     const listener = (): void => {
@@ -130,102 +134,201 @@ function AppView(props: AppViewProps): ReactElement {
     embedded,
     showPadding,
     disableScrolling,
-    showFooter,
     showToolbar,
     showColoredLine,
-    toastAdjustment,
+    sidebarChevronDownshift,
   } = React.useContext(AppContext)
 
-  const renderBlock = (node: BlockNode, events = false): ReactElement => (
-    <StyledAppViewBlockContainer
-      className="block-container"
-      data-testid="block-container"
-      isWideMode={wideMode}
-      showPadding={showPadding}
-      addPaddingForHeader={showToolbar || showColoredLine}
-      addPaddingForChatInput={containsChatInput}
-      events={events}
-    >
-      <VerticalBlock
-        node={node}
-        endpoints={endpoints}
-        sessionInfo={sessionInfo}
-        scriptRunId={scriptRunId}
-        scriptRunState={scriptRunState}
-        widgetMgr={widgetMgr}
-        widgetsDisabled={widgetsDisabled}
-        uploadClient={uploadClient}
-        componentRegistry={componentRegistry}
-        formsData={formsData}
-      />
-    </StyledAppViewBlockContainer>
-  )
+  const { addScriptFinishedHandler, removeScriptFinishedHandler } =
+    React.useContext(LibContext)
 
   const layout = wideMode ? "wide" : "narrow"
   const hasSidebarElements = !elements.sidebar.isEmpty
-  const showSidebar =
-    hasSidebarElements || (!hideSidebarNav && appPages.length > 1)
   const hasEventElements = !elements.event.isEmpty
+  const hasBottomElements = !elements.bottom.isEmpty
+
+  const [showSidebarOverride, setShowSidebarOverride] = React.useState(false)
+
+  const showSidebar =
+    hasSidebarElements ||
+    (!hideSidebarNav && appPages.length > 1) ||
+    showSidebarOverride
+
+  React.useEffect(() => {
+    // Handle sidebar flicker/unmount with MPA & hideSidebarNav
+    if (showSidebar && hideSidebarNav && !showSidebarOverride) {
+      setShowSidebarOverride(true)
+    }
+  }, [showSidebar, hideSidebarNav, showSidebarOverride])
+
+  const scriptFinishedHandler = React.useCallback(() => {
+    // Check at end of script run if no sidebar elements
+    if (!hasSidebarElements && showSidebarOverride) {
+      setShowSidebarOverride(false)
+    }
+  }, [hasSidebarElements, showSidebarOverride])
+
+  React.useEffect(() => {
+    addScriptFinishedHandler(scriptFinishedHandler)
+    return () => {
+      removeScriptFinishedHandler(scriptFinishedHandler)
+    }
+  }, [
+    scriptFinishedHandler,
+    addScriptFinishedHandler,
+    removeScriptFinishedHandler,
+  ])
+
+  const renderLogo = (appLogo: Logo): ReactElement => {
+    const displayImage = appLogo.iconImage ? appLogo.iconImage : appLogo.image
+    const source = endpoints.buildMediaURL(displayImage)
+
+    const logo = (
+      <StyledLogo
+        src={source}
+        size={appLogo.size}
+        alt="Logo"
+        className="stLogo"
+        data-testid="stLogo"
+      />
+    )
+
+    if (appLogo.link) {
+      return (
+        <StyledLogoLink
+          href={appLogo.link}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="stLogoLink"
+        >
+          {logo}
+        </StyledLogoLink>
+      )
+    }
+    return logo
+  }
+
+  // Activate scroll to bottom whenever there are bottom elements:
+  const Component = hasBottomElements
+    ? ScrollToBottomContainer
+    : StyledAppViewMain
+
+  const renderBlock = (node: BlockNode): ReactElement => (
+    <VerticalBlock
+      node={node}
+      endpoints={endpoints}
+      scriptRunId={scriptRunId}
+      scriptRunState={scriptRunState}
+      widgetMgr={widgetMgr}
+      widgetsDisabled={widgetsDisabled}
+      uploadClient={uploadClient}
+      componentRegistry={componentRegistry}
+      formsData={formsData}
+    />
+  )
 
   // The tabindex is required to support scrolling by arrow keys.
   return (
     <StyledAppViewContainer
-      className="appview-container"
+      className="stAppViewContainer appview-container"
       data-testid="stAppViewContainer"
       data-layout={layout}
     >
       {showSidebar && (
-        <ThemedSidebar
-          endpoints={endpoints}
-          initialSidebarState={initialSidebarState}
-          appPages={appPages}
-          hasElements={hasSidebarElements}
-          onPageChange={onPageChange}
-          currentPageScriptHash={currentPageScriptHash}
-          hideSidebarNav={hideSidebarNav}
+        <Profiler id="Sidebar">
+          <ThemedSidebar
+            endpoints={endpoints}
+            initialSidebarState={initialSidebarState}
+            appLogo={appLogo}
+            appPages={appPages}
+            navSections={navSections}
+            hasElements={hasSidebarElements}
+            onPageChange={onPageChange}
+            currentPageScriptHash={currentPageScriptHash}
+            hideSidebarNav={hideSidebarNav}
+            expandSidebarNav={expandSidebarNav}
+          >
+            <StyledSidebarBlockContainer>
+              {renderBlock(elements.sidebar)}
+            </StyledSidebarBlockContainer>
+          </ThemedSidebar>
+        </Profiler>
+      )}
+      {!showSidebar && appLogo && (
+        <StyledSidebarOpenContainer
+          chevronDownshift={sidebarChevronDownshift}
+          data-testid="stSidebarCollapsedControl"
         >
-          {renderBlock(elements.sidebar)}
-        </ThemedSidebar>
+          {renderLogo(appLogo)}
+        </StyledSidebarOpenContainer>
       )}
       <Component
         tabIndex={0}
         isEmbedded={embedded}
         disableScrolling={disableScrolling}
-        className="main"
+        className="stMain"
+        data-testid="stMain"
       >
-        {renderBlock(elements.main)}
+        <Profiler id="Main">
+          <StyledAppViewBlockContainer
+            className="stMainBlockContainer block-container"
+            data-testid="stMainBlockContainer"
+            isWideMode={wideMode}
+            showPadding={showPadding}
+            addPaddingForHeader={showToolbar || showColoredLine}
+            hasBottom={hasBottomElements}
+            isEmbedded={embedded}
+            hasSidebar={showSidebar}
+          >
+            {renderBlock(elements.main)}
+          </StyledAppViewBlockContainer>
+        </Profiler>
         {/* Anchor indicates to the iframe resizer that this is the lowest
         possible point to determine height. But we don't add an anchor if there is
-        a bottom pinned chat_input in the app, since those two aspects don't work
+        a bottom container in the app, since those two aspects don't work
         well together. */}
-        {!containsChatInput && (
+        {!hasBottomElements && (
           <StyledIFrameResizerAnchor
-            hasFooter={!embedded || showFooter}
-            data-testid="IframeResizerAnchor"
+            data-testid="stAppIframeResizerAnchor"
             data-iframe-height
           />
         )}
-        {/* Spacer fills up dead space to ensure the footer remains at the
-        bottom of the page in larger views */}
-        {(!embedded || showFooter) && (
-          <StyledAppViewBlockSpacer data-testid="AppViewBlockSpacer" />
-        )}
-        {(!embedded || showFooter) && !containsChatInput && (
-          <StyledAppViewFooter isWideMode={wideMode}>
-            Made with{" "}
-            <StyledAppViewFooterLink href="//streamlit.io" target="_blank">
-              Streamlit
-            </StyledAppViewFooterLink>
-          </StyledAppViewFooter>
+        {hasBottomElements && (
+          <Profiler id="Bottom">
+            {/* We add spacing here to make sure that the sticky bottom is
+           always pinned the bottom. Using sticky layout here instead of
+           absolut / fixed is a trick to automatically account for the bottom
+           height in the scroll area. Thereby, the bottom container will never
+           cover something if you scroll to the end.*/}
+            <StyledAppViewBlockSpacer />
+            <StyledStickyBottomContainer
+              className="stBottom"
+              data-testid="stBottom"
+            >
+              <StyledInnerBottomContainer>
+                <StyledBottomBlockContainer
+                  data-testid="stBottomBlockContainer"
+                  isWideMode={wideMode}
+                  showPadding={showPadding}
+                >
+                  {renderBlock(elements.bottom)}
+                </StyledBottomBlockContainer>
+              </StyledInnerBottomContainer>
+            </StyledStickyBottomContainer>
+          </Profiler>
         )}
       </Component>
       {hasEventElements && (
-        <EventContainer
-          toastAdjustment={toastAdjustment}
-          scriptRunId={elements.event.scriptRunId}
-        >
-          {renderBlock(elements.event, true)}
-        </EventContainer>
+        <Profiler id="Event">
+          <EventContainer scriptRunId={elements.event.scriptRunId}>
+            <StyledEventBlockContainer
+              className="stEvent"
+              data-testid="stEvent"
+            >
+              {renderBlock(elements.event)}
+            </StyledEventBlockContainer>
+          </EventContainer>
+        </Profiler>
       )}
     </StyledAppViewContainer>
   )

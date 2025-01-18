@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,18 @@
 
 """st.audio unit tests"""
 
-import io
 import os
 from io import BytesIO
 
 import numpy as np
+import pytest
 from parameterized import parameterized
-from scipy.io import wavfile
 
 import streamlit as st
-from streamlit.elements.media import _maybe_convert_to_wav_bytes
+from streamlit.elements.media import (
+    _maybe_convert_to_wav_bytes,
+    _parse_start_time_end_time,
+)
 from streamlit.errors import StreamlitAPIException
 from streamlit.proto.Alert_pb2 import Alert as AlertProto
 from streamlit.runtime.media_file_storage import MediaFileStorageError
@@ -37,7 +39,7 @@ class AudioTest(DeltaGeneratorTestCase):
         """Test st.audio using fake audio bytes."""
 
         # Fake audio data: expect the resultant mimetype to be audio default.
-        fake_audio_data = "\x11\x22\x33\x44\x55\x66".encode("utf-8")
+        fake_audio_data = b"\x11\x22\x33\x44\x55\x66"
 
         st.audio(fake_audio_data)
 
@@ -128,7 +130,7 @@ class AudioTest(DeltaGeneratorTestCase):
         """Test st.audio raises streamlit warning when sample_rate parameter provided,
         but data is not a numpy array."""
 
-        fake_audio_data = "\x11\x22\x33\x44\x55\x66".encode("utf-8")
+        fake_audio_data = b"\x11\x22\x33\x44\x55\x66"
         sample_rate = 44100
 
         st.audio(fake_audio_data, sample_rate=sample_rate)
@@ -191,7 +193,7 @@ class AudioTest(DeltaGeneratorTestCase):
     def test_maybe_convert_to_wave_bytes_with_sample_rate(self):
         """Test _maybe_convert_to_wave_bytes works correctly with bytes."""
 
-        fake_audio_data_bytes = "\x11\x22\x33\x44\x55\x66".encode("utf-8")
+        fake_audio_data_bytes = b"\x11\x22\x33\x44\x55\x66"
         sample_rate = 44100
 
         computed_bytes = _maybe_convert_to_wav_bytes(
@@ -208,8 +210,11 @@ class AudioTest(DeltaGeneratorTestCase):
         computed_bytes = _maybe_convert_to_wav_bytes(np_arr, sample_rate=None)
         self.assertTrue(computed_bytes is np_arr)
 
+    @pytest.mark.require_integration
     def test_st_audio_from_file(self):
         """Test st.audio using generated data in a file-like object."""
+        from scipy.io import wavfile
+
         sample_rate = 44100
         frequency = 440
         length = 5
@@ -221,7 +226,7 @@ class AudioTest(DeltaGeneratorTestCase):
 
         wavfile.write("test.wav", sample_rate, y)
 
-        with io.open("test.wav", "rb") as f:
+        with open("test.wav", "rb") as f:
             st.audio(f)
 
         el = self.get_delta_from_queue().new_element
@@ -254,16 +259,75 @@ class AudioTest(DeltaGeneratorTestCase):
     def test_st_audio_other_inputs(self):
         """Test that our other data types don't result in an error."""
         st.audio(b"bytes_data")
-        st.audio("str_data".encode("utf-8"))
+        st.audio(b"str_data")
         st.audio(BytesIO(b"bytesio_data"))
         st.audio(np.array([0, 1, 2, 3]), sample_rate=44100)
 
     def test_st_audio_options(self):
         """Test st.audio with options."""
-        fake_audio_data = "\x11\x22\x33\x44\x55\x66".encode("utf-8")
-        st.audio(fake_audio_data, format="audio/mp3", start_time=10)
+        fake_audio_data = b"\x11\x22\x33\x44\x55\x66"
+        st.audio(
+            fake_audio_data,
+            format="audio/mp3",
+            start_time=10,
+            end_time=21,
+            loop=True,
+            autoplay=True,
+        )
 
         el = self.get_delta_from_queue().new_element
         self.assertEqual(el.audio.start_time, 10)
+        self.assertEqual(el.audio.end_time, 21)
+        self.assertTrue(el.audio.loop)
+        self.assertTrue(el.audio.autoplay)
         self.assertTrue(el.audio.url.startswith(MEDIA_ENDPOINT))
         self.assertTrue(_calculate_file_id(fake_audio_data, "audio/mp3"), el.audio.url)
+
+    def test_st_audio_just_data(self):
+        """Test st.audio with just data specified."""
+        fake_audio_data = b"\x11\x22\x33\x44\x55\x66"
+        st.audio(fake_audio_data)
+
+        el = self.get_delta_from_queue().new_element
+        self.assertEqual(el.audio.start_time, 0)
+        self.assertEqual(el.audio.end_time, 0)
+        self.assertFalse(el.audio.loop)
+        self.assertFalse(el.audio.autoplay)
+        self.assertTrue(el.audio.url.startswith(MEDIA_ENDPOINT))
+        self.assertTrue(_calculate_file_id(fake_audio_data, "audio/wav"), el.audio.url)
+
+    @parameterized.expand(
+        [
+            ("1s", None, (1, None)),
+            ("1m", None, (60, None)),
+            ("1m2s", None, (62, None)),
+            (0, "1m", (0, 60)),
+            ("1h2m3s", None, (3723, None)),
+            ("1m2s", "1m10s", (62, 70)),
+            ("10 seconds", "15 seconds", (10, 15)),
+            ("3 minutes 10 seconds", "3 minutes 20 seconds", (190, 200)),
+        ]
+    )
+    def test_parse_start_time_end_time_success(
+        self, input_start_time, input_end_time, expected_value
+    ):
+        """Test that _parse_start_time_end_time works correctly."""
+        self.assertEqual(
+            _parse_start_time_end_time(input_start_time, input_end_time),
+            expected_value,
+        )
+
+    @parameterized.expand(
+        [
+            ("INVALID_VALUE", None, "Failed to convert 'start_time' to a timedelta"),
+            (5, "INVALID_VALUE", "Failed to convert 'end_time' to a timedelta"),
+        ]
+    )
+    def test_parse_start_time_end_time_fail(self, start_time, end_time, exception_text):
+        """Test that _parse_start_time_end_time works with correct exception text."""
+
+        with self.assertRaises(StreamlitAPIException) as e:
+            _parse_start_time_end_time(start_time, end_time)
+
+        self.assertIn(exception_text, str(e.exception))
+        self.assertIn("INVALID_VALUE", str(e.exception))

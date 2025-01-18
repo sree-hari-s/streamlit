@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
+import { AppNode, BlockNode } from "@streamlit/lib/src/AppNode"
+import { ComponentRegistry } from "@streamlit/lib/src/components/widgets/CustomComponent"
+import { FileUploadClient } from "@streamlit/lib/src/FileUploadClient"
 import { ScriptRunState } from "@streamlit/lib/src/ScriptRunState"
-import { BlockNode, AppNode } from "@streamlit/lib/src/AppNode"
+import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
+import { EmotionTheme, getDividerColors } from "@streamlit/lib/src/theme"
+import { isValidElementId } from "@streamlit/lib/src/util/utils"
 import {
   FormsData,
   WidgetStateManager,
 } from "@streamlit/lib/src/WidgetStateManager"
-import { FileUploadClient } from "@streamlit/lib/src/FileUploadClient"
-import { ComponentRegistry } from "@streamlit/lib/src/components/widgets/CustomComponent"
-import { SessionInfo } from "@streamlit/lib/src/SessionInfo"
-import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
-import { EmotionTheme, getDividerColors } from "@streamlit/lib/src/theme"
 
 export function shouldComponentBeEnabled(
   elementType: string,
@@ -36,16 +36,29 @@ export function shouldComponentBeEnabled(
 export function isElementStale(
   node: AppNode,
   scriptRunState: ScriptRunState,
-  scriptRunId: string
+  scriptRunId: string,
+  fragmentIdsThisRun?: Array<string>
 ): boolean {
   if (scriptRunState === ScriptRunState.RERUN_REQUESTED) {
     // If a rerun was just requested, all of our current elements
     // are about to become stale.
     return true
   }
+
   if (scriptRunState === ScriptRunState.RUNNING) {
+    if (fragmentIdsThisRun && fragmentIdsThisRun.length) {
+      // if the fragmentId is set, we only want to mark elements as stale
+      // that belong to the same fragmentId and have a different scriptRunId.
+      // If they have the same scriptRunId, they were just updated.
+      return Boolean(
+        node.fragmentId &&
+          fragmentIdsThisRun.includes(node.fragmentId) &&
+          node.scriptRunId !== scriptRunId
+      )
+    }
     return node.scriptRunId !== scriptRunId
   }
+
   return false
 }
 
@@ -53,9 +66,13 @@ export function isComponentStale(
   enable: boolean,
   node: AppNode,
   scriptRunState: ScriptRunState,
-  scriptRunId: string
+  scriptRunId: string,
+  fragmentIdsThisRun?: Array<string>
 ): boolean {
-  return !enable || isElementStale(node, scriptRunState, scriptRunId)
+  return (
+    !enable ||
+    isElementStale(node, scriptRunState, scriptRunId, fragmentIdsThisRun)
+  )
 }
 
 export function assignDividerColor(
@@ -94,11 +111,6 @@ export interface BaseBlockProps {
    * used by various Streamlit elements.
    */
   endpoints: StreamlitEndpoints
-
-  /**
-   * The app's SessionInfo instance. Exposes session-specific properties.
-   */
-  sessionInfo: SessionInfo
 
   /**
    * The app's WidgetStateManager instance. Used by all widget elements to
@@ -149,4 +161,42 @@ export interface BaseBlockProps {
    * from that callback.
    */
   formsData: FormsData
+
+  /**
+   * If true , the element should not allow going into fullscreen. Right now we plan
+   * to use it, for example, in Dialogs to prevent fullscreen issues.
+   */
+  disableFullscreenMode?: boolean
+}
+
+/**
+ * Converts a user-specified key to a valid CSS class name.
+ *
+ * @param key - The key to convert.
+ * @returns A valid CSS class name.
+ */
+export function convertKeyToClassName(key: string | undefined | null): string {
+  if (!key) {
+    return ""
+  }
+  const className = key.trim().replace(/[^a-zA-Z0-9_-]/g, "-")
+  return "st-key-" + className
+}
+
+/**
+ * Returns the user-specified key extracted from the element id, or undefined if the id does
+ * not have a user-specified key.
+ */
+export function getKeyFromId(
+  elementId: string | undefined | null
+): string | undefined {
+  if (!elementId || !isValidElementId(elementId)) {
+    return undefined
+  }
+
+  // Split the elementId by hyphens
+  const parts = elementId.split("-")
+  // Extract all parts after the second hyphen
+  const userKey = parts.slice(2).join("-")
+  return userKey === "None" ? undefined : userKey
 }

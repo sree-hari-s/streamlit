@@ -13,7 +13,7 @@ jobs:
 
     defaults:
       run:
-        shell: bash --login -eo pipefail {0}
+        shell: bash
 
     permissions:
       # Additional permission needed to generate tag
@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout Streamlit code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
           # Save the access token to the local git config, so
@@ -34,7 +34,7 @@ jobs:
       - name: Set Python version vars
         uses: ./.github/actions/build_info
       - name: Set up Python ${{ env.PYTHON_MAX_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "${{ env.PYTHON_MAX_VERSION }}"
       - name: Setup virtual env
@@ -71,11 +71,12 @@ jobs:
     permissions:
       # Pass additional permission needed to upload constraints
       contents: write
-    uses: ./.github/workflows/python-versions.yml
+    uses: ./.github/workflows/python-tests.yml
     with:
       ref: ${{needs.create-nightly-tag.outputs.tag}}
     secrets:
-      PARAMETER_PASSWORD: ${{ secrets.PARAMETER_PASSWORD }}
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
 
   run-javascript-tests:
     needs: create-nightly-tag
@@ -83,17 +84,16 @@ jobs:
     with:
       ref: ${{needs.create-nightly-tag.outputs.tag}}
 
-  run-py-prod-deps-smoke-test:
-    needs: create-nightly-tag
-    uses: ./.github/workflows/py-prod-deps-smoke-test.yml
+  run-playwright-tests:
+    uses: ./.github/workflows/playwright.yml
     with:
       ref: ${{needs.create-nightly-tag.outputs.tag}}
 
-  run-cypress-tests:
-    needs: create-nightly-tag
-    uses: ./.github/workflows/cypress.yml
+  performance-lighthouse:
+    uses: ./.github/workflows/performance-lighthouse.yml
     with:
       ref: ${{needs.create-nightly-tag.outputs.tag}}
+      externalCall: true
 
   test-status-notification:
     runs-on: ubuntu-latest
@@ -105,8 +105,7 @@ jobs:
       - create-nightly-tag
       - run-python-tests
       - run-javascript-tests
-      - run-py-prod-deps-smoke-test
-      - run-cypress-tests
+      - run-playwright-tests
 
     env:
       SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
@@ -114,7 +113,7 @@ jobs:
 
     steps:
       - name: Checkout Streamlit code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-nightly-tag.outputs.tag }}
           persist-credentials: false
@@ -123,10 +122,8 @@ jobs:
         run: python scripts/slack_notifications.py nightly python
       - if: ${{ needs.run-javascript-tests.result == 'failure' }}
         run: python scripts/slack_notifications.py nightly js
-      - if: ${{ needs.run-py-prod-deps-smoke-test.result == 'failure' }}
-        run: python scripts/slack_notifications.py nightly py_prod
-      - if: ${{ needs.run-cypress-tests.result == 'failure' }}
-        run: python scripts/slack_notifications.py nightly cypress
+      - if: ${{ needs.run-playwright-tests.result == 'failure' }}
+        run: python scripts/slack_notifications.py nightly playwright
 
   create-nightly-build:
     runs-on: ubuntu-latest
@@ -136,20 +133,23 @@ jobs:
       - create-nightly-tag
       - run-python-tests
       - run-javascript-tests
-      - run-py-prod-deps-smoke-test
-      - run-cypress-tests
+      - run-playwright-tests
+    permissions:
+      id-token: write
 
     defaults:
       run:
-        shell: bash --login -eo pipefail {0}
+        shell: bash
 
     outputs:
       enable-setup: ${{ steps.exports.outputs.enable-setup }}
       s3-url: ${{ steps.exports.outputs.s3-url }}
 
+    environment: nightly
+
     steps:
       - name: Checkout Streamlit code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-nightly-tag.outputs.tag }}
           # Save the access token to the local git config, so
@@ -159,7 +159,7 @@ jobs:
       - name: Set Python version vars
         uses: ./.github/actions/build_info
       - name: Set up Python ${{ env.PYTHON_MAX_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "${{ env.PYTHON_MAX_VERSION }}"
       - name: Setup virtual env
@@ -175,10 +175,11 @@ jobs:
       - name: Build Package
         timeout-minutes: 120
         run: |
+          sudo apt update
           sudo apt install rsync
           make package
       - name: Store Whl File
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: whl_file
           path: lib/dist/*.whl
@@ -189,7 +190,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.CORE_PREVIEWS_S3_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.CORE_PREVIEWS_S3_SECRET_KEY }}
         run: |
-          sudo apt install -y awscli
+          # Install awscli via pip/uv:
+          uv pip install awscli
 
           cd lib/dist
           export WHEELFILE="$(ls -t *.whl | head -n 1)"
@@ -204,11 +206,9 @@ jobs:
           echo "enable-setup=${{ env.AWS_ACCESS_KEY_ID != '' }}" >> $GITHUB_OUTPUT
           echo "s3-url=${S3_URL}" >> $GITHUB_OUTPUT
       - name: Upload to PyPI
-        env:
-          TWINE_USERNAME: ${{ secrets.NIGHTLY_PYPI_USERNAME }}
-          TWINE_PASSWORD: ${{ secrets.NIGHTLY_PYPI_API_TOKEN }}
-        run: |
-          make distribute
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: lib/dist/
       - if: ${{ failure() }}
         name: Nightly Build Failure Slack Message
         env:
@@ -224,11 +224,11 @@ jobs:
 
     defaults:
       run:
-        shell: bash --login -eo pipefail {0}
+        shell: bash
 
     steps:
       - name: Checkout Core Previews Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: streamlit/core-previews
           # The default GITHUB_TOKEN is scoped only to the triggering streamlit/streamlit repo.

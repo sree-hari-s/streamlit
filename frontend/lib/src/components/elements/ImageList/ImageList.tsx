@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,15 +14,20 @@
  * limitations under the License.
  */
 
-import React, { ReactElement } from "react"
+import React, { CSSProperties, ReactElement } from "react"
 
 import {
-  IImage,
-  Image as ImageProto,
   ImageList as ImageListProto,
+  Image as ImageProto,
 } from "@streamlit/lib/src/proto"
-import withFullScreenWrapper from "@streamlit/lib/src/hocs/withFullScreenWrapper"
 import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
+import Toolbar, {
+  StyledToolbarElementContainer,
+} from "@streamlit/lib/src/components/shared/Toolbar"
+import { ElementFullscreenContext } from "@streamlit/lib/src/components/shared/ElementFullscreen/ElementFullscreenContext"
+import { useRequiredContext } from "@streamlit/lib/src/hooks/useRequiredContext"
+import { withFullScreenWrapper } from "@streamlit/lib/src/components/shared/FullScreenWrapper"
+import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
 
 import {
   StyledCaption,
@@ -33,82 +38,123 @@ import {
 export interface ImageListProps {
   endpoints: StreamlitEndpoints
   width: number
-  isFullScreen: boolean
   element: ImageListProto
-  height?: number
+  disableFullscreenMode?: boolean
 }
 
+/**
+ * @see WidthBehavior on the Backend
+ * @see the Image.proto file
+ */
 enum WidthBehavior {
   OriginalWidth = -1,
+  /** @deprecated */
   ColumnWidth = -2,
+  /** @deprecated */
   AutoWidth = -3,
+  MinImageOrContainer = -4,
+  MaxImageOrContainer = -5,
 }
 
 /**
  * Functional element for a horizontal list of images.
  */
-export function ImageList({
-  width,
-  isFullScreen,
+function ImageList({
   element,
-  height,
+  width,
   endpoints,
-}: ImageListProps): ReactElement {
+  disableFullscreenMode,
+}: Readonly<ImageListProps>): ReactElement {
+  const {
+    expanded: isFullScreen,
+    width: fullScreenWidth,
+    height,
+    expand,
+    collapse,
+  } = useRequiredContext(ElementFullscreenContext)
+
+  // The width of the element is the width of the container, not necessarily the image.
+  const elementWidth: number = isFullScreen ? fullScreenWidth : width
   // The width field in the proto sets the image width, but has special
-  // cases for -1, -2, and -3.
-  let containerWidth: number | undefined
+  // cases the values in the WidthBehavior enum.
+  let imageWidth: number | undefined
   const protoWidth = element.width
 
   if (
-    protoWidth === WidthBehavior.OriginalWidth ||
-    protoWidth === WidthBehavior.AutoWidth
+    [
+      WidthBehavior.OriginalWidth,
+      WidthBehavior.AutoWidth,
+      WidthBehavior.MinImageOrContainer,
+    ].includes(protoWidth)
   ) {
     // Use the original image width.
-    containerWidth = undefined
-  } else if (protoWidth === WidthBehavior.ColumnWidth) {
-    // Use the column width
-    containerWidth = width
+    imageWidth = undefined
+  } else if (
+    [WidthBehavior.ColumnWidth, WidthBehavior.MaxImageOrContainer].includes(
+      protoWidth
+    )
+  ) {
+    // Use the full element width (which handles the full screen case)
+    imageWidth = elementWidth
   } else if (protoWidth > 0) {
     // Set the image width explicitly.
-    containerWidth = protoWidth
+    imageWidth = protoWidth
   } else {
     throw Error(`Invalid image width: ${protoWidth}`)
   }
 
-  const imgStyle: any = {}
+  const imgStyle: CSSProperties = {}
 
   if (height && isFullScreen) {
     imgStyle.maxHeight = height
-    imgStyle["object-fit"] = "contain"
+    imgStyle.objectFit = "contain"
   } else {
-    imgStyle.width = containerWidth
-
-    if (protoWidth === WidthBehavior.AutoWidth) {
-      // Cap the image width, so it doesn't exceed the column width
-      imgStyle.maxWidth = "100%"
-    }
+    imgStyle.width = imageWidth
+    // Cap the image width, so it doesn't exceed its parent container width
+    imgStyle.maxWidth = "100%"
   }
 
   return (
-    <StyledImageList style={{ width }}>
-      {element.imgs.map((iimage: IImage, idx: number): ReactElement => {
-        const image = iimage as ImageProto
-        return (
-          <StyledImageContainer key={idx} data-testid="stImage">
-            <img
-              style={imgStyle}
-              src={endpoints.buildMediaURL(image.url)}
-              alt={idx.toString()}
-            />
-            {image.caption && (
-              <StyledCaption data-testid="caption" style={imgStyle}>
-                {` ${image.caption} `}
-              </StyledCaption>
-            )}
-          </StyledImageContainer>
-        )
-      })}
-    </StyledImageList>
+    <StyledToolbarElementContainer
+      width={elementWidth}
+      height={height}
+      useContainerWidth={isFullScreen}
+      topCentered
+    >
+      <Toolbar
+        target={StyledToolbarElementContainer}
+        isFullScreen={isFullScreen}
+        onExpand={expand}
+        onCollapse={collapse}
+        disableFullscreenMode={disableFullscreenMode}
+      ></Toolbar>
+      <StyledImageList className="stImage" data-testid="stImage">
+        {element.imgs.map((iimage, idx): ReactElement => {
+          const image = iimage as ImageProto
+          return (
+            <StyledImageContainer data-testid="stImageContainer" key={idx}>
+              <img
+                style={imgStyle}
+                src={endpoints.buildMediaURL(image.url)}
+                alt={idx.toString()}
+              />
+              {image.caption && (
+                <StyledCaption data-testid="stImageCaption" style={imgStyle}>
+                  <StreamlitMarkdown
+                    source={image.caption}
+                    allowHTML={false}
+                    isCaption
+                    // This is technically not a label but we want the same restrictions
+                    // as for labels (e.g. no Markdown tables or horizontal rule).
+                    isLabel
+                  />
+                </StyledCaption>
+              )}
+            </StyledImageContainer>
+          )
+        })}
+      </StyledImageList>
+    </StyledToolbarElementContainer>
   )
 }
 

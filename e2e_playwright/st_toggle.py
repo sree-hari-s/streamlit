@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,3 +46,13 @@ st.write("toggle 7 - value:", i7)
 
 i8 = st.toggle("toggle 8 (label collapsed)", label_visibility="collapsed")
 st.write("toggle 8 - value:", i8)
+
+with st.expander("Grouped toggles", expanded=True):
+    st.toggle("toggle group - 1")
+    st.toggle("toggle group - 2")
+    st.toggle("toggle group - 3")
+    st.text("A non-toggle element")
+
+st.toggle(
+    "toggle 9 -> :material/check: :rainbow[Fancy] _**markdown** `label` _support_"
+)

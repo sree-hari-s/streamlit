@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,15 @@
 import streamlit as st
 from streamlit import runtime
 
-i1 = st.checkbox("checkbox 1 (True)", True)
+leading_indent_code_tooltip = """
+Code:
+
+    This
+    is
+    a
+    code
+    block!"""
+i1 = st.checkbox("checkbox 1 (True)", True, help=leading_indent_code_tooltip)
 st.write("checkbox 1 - value:", i1)
 
 i2 = st.checkbox("checkbox 2 (False)", False)
@@ -46,3 +54,13 @@ st.write("checkbox 7 - value:", i7)
 
 i8 = st.checkbox("checkbox 8 (label collapsed)", label_visibility="collapsed")
 st.write("checkbox 8 - value:", i8)
+
+with st.expander("Grouped checkboxes", expanded=True):
+    st.checkbox("checkbox group - 1")
+    st.checkbox("checkbox group - 2")
+    st.checkbox("checkbox group - 3")
+    st.text("A non-checkbox element")
+
+st.checkbox(
+    "checkbox 9 -> :material/check: :rainbow[Fancy] _**markdown** `label` _support_"
+)

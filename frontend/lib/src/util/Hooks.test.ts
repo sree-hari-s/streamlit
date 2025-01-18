@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,13 @@ import { useIsOverflowing } from "./Hooks"
 
 const stateSetters: Array<any> = []
 
-jest.mock("react", () => ({
+vi.mock("react", async () => ({
   __esModule: true,
-  ...jest.requireActual("react"),
-  useEffect: jest.fn().mockImplementation(cb => cb()),
-  useState: jest.fn().mockImplementation(() => {
-    const setValue = jest.fn()
+  ...(await vi.importActual("react")),
+  useCallback: vi.fn().mockImplementation(cb => cb),
+  useEffect: vi.fn().mockImplementation(cb => cb()),
+  useState: vi.fn().mockImplementation(() => {
+    const setValue = vi.fn()
     stateSetters.push(setValue)
 
     return [false, setValue]

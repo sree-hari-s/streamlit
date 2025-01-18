@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,14 @@
  * limitations under the License.
  */
 
-import produce, { Draft } from "immer"
+import { Draft, default as produce } from "immer"
 import { Long, util } from "protobufjs"
+import { Signal, SignalConnection } from "typed-signals"
+
+import {
+  isValidFormId,
+  notNullOrUndefined,
+} from "@streamlit/lib/src/util/utils"
 
 import {
   DoubleArray,
@@ -23,13 +29,11 @@ import {
   IFileUploaderState,
   SInt64Array,
   StringArray,
-  Button as SubmitButtonProto,
   StringTriggerValue,
+  Button as SubmitButtonProto,
   WidgetState,
   WidgetStates,
 } from "./proto"
-import { Signal, SignalConnection } from "typed-signals"
-import { isValidFormId } from "./util/utils"
 
 export interface Source {
   fromUi: boolean
@@ -143,6 +147,9 @@ class FormState {
   /** True if the form was created with the clear_on_submit flag. */
   public clearOnSubmit = false
 
+  /** True if the form was created with the enter_to_submit flag. */
+  public enterToSubmit = true
+
   /** Signal emitted when the form is cleared. */
   public readonly formCleared = new Signal()
 
@@ -154,7 +161,12 @@ class FormState {
 
 interface Props {
   /** Callback to deliver a message to the server */
-  sendRerunBackMsg: (widgetStates: WidgetStates) => void
+  sendRerunBackMsg: (
+    widgetStates: WidgetStates,
+    fragmentId: string | undefined,
+    pageScriptHash: string | undefined,
+    isAutoRerun: boolean | undefined
+  ) => void
 
   /**
    * Callback invoked whenever our FormsData changed. (Because FormsData
@@ -178,6 +190,11 @@ export class WidgetStateManager {
   // External data about all forms.
   private formsData: FormsData
 
+  // A dictionary that maps elementId -> element state keys -> element state values.
+  // This is used to store frontend-only state for elements.
+  // This state is not never sent to the server.
+  private readonly elementStates = new Map<string, Map<string, any>>()
+
   constructor(props: Props) {
     this.props = props
     this.formsData = createFormsData()
@@ -195,18 +212,28 @@ export class WidgetStateManager {
   }
 
   /**
-   * Register a Form, and assign its clearOnSubmit value.
+   * Register a Form, and assign its clearOnSubmit & enterToSubmit values.
    * The `Form` element calls this when it's first mounted.
    */
-  public setFormClearOnSubmit(formId: string, clearOnSubmit: boolean): void {
-    this.getOrCreateFormState(formId).clearOnSubmit = clearOnSubmit
+  public setFormSubmitBehaviors(
+    formId: string,
+    clearOnSubmit: boolean,
+    enterToSubmit = true
+  ): void {
+    const form = this.getOrCreateFormState(formId)
+    form.clearOnSubmit = clearOnSubmit
+    form.enterToSubmit = enterToSubmit
   }
 
   /**
    * Commit pending changes for widgets that belong to the given form,
    * and send a rerunBackMsg to the server.
    */
-  public submitForm(formId: string, actualSubmitButton?: WidgetInfo): void {
+  public submitForm(
+    formId: string,
+    fragmentId: string | undefined,
+    actualSubmitButton?: WidgetInfo
+  ): void {
     if (!isValidFormId(formId)) {
       // This should never get thrown - only FormSubmitButton calls this
       // function.
@@ -239,7 +266,7 @@ export class WidgetStateManager {
     this.widgetStates.copyFrom(form.widgetStates)
     form.widgetStates.clear()
 
-    this.sendUpdateWidgetsMessage()
+    this.sendUpdateWidgetsMessage(fragmentId)
     this.syncFormsWithPendingChanges()
 
     if (selectedSubmitButton) {
@@ -256,6 +283,29 @@ export class WidgetStateManager {
     }
   }
 
+  /* Sometimes users change an input field and directly click on a button - which uses the trigger value -
+   * to trigger a rerun. We wrap the code that sends the trigger update in `setTimeout` so that trigger-based
+   * updates will be executed at the end of JavaScript's event loop. Callbacks for other elements, for example,
+   * the onBlur event of an input field, will be deterministically executed first in the event loop since they
+   * were encountered first in the sequential execution and will be executed FIFO from the task queue.
+   *
+   * Returns a promise that is resolved as soon as the timeout was triggered, mainly to make this easier to test.
+   * in our unit tests.
+   */
+  private setTriggerValueAtEndOfEventLoop(
+    widget: WidgetInfo,
+    source: Source,
+    fragmentId: string | undefined
+  ): Promise<void> {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        this.onWidgetValueChanged(widget.formId, source, fragmentId)
+        this.deleteWidgetState(widget.id)
+        resolve()
+      }, 0)
+    })
+  }
+
   /**
    * Sets the string trigger value for the given widget ID to a string value,
    * sends a rerunScript message to the server, and then immediately unsets the
@@ -264,27 +314,30 @@ export class WidgetStateManager {
   public setStringTriggerValue(
     widget: WidgetInfo,
     value: string,
-    source: Source
-  ): void {
+    source: Source,
+    fragmentId: string | undefined
+  ): Promise<void> {
     this.createWidgetState(widget, source).stringTriggerValue =
       new StringTriggerValue({ data: value })
-    this.onWidgetValueChanged(widget.formId, source)
-    this.deleteWidgetState(widget.id)
+    return this.setTriggerValueAtEndOfEventLoop(widget, source, fragmentId)
   }
 
   /**
    * Sets the trigger value for the given widget ID to true, sends a rerunScript message
    * to the server, and then immediately unsets the trigger value.
    */
-  public setTriggerValue(widget: WidgetInfo, source: Source): void {
+  public setTriggerValue(
+    widget: WidgetInfo,
+    source: Source,
+    fragmentId: string | undefined
+  ): Promise<void> {
     this.createWidgetState(widget, source).triggerValue = true
-    this.onWidgetValueChanged(widget.formId, source)
-    this.deleteWidgetState(widget.id)
+    return this.setTriggerValueAtEndOfEventLoop(widget, source, fragmentId)
   }
 
   public getBoolValue(widget: WidgetInfo): boolean | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "boolValue") {
+    if (notNullOrUndefined(state) && state.value === "boolValue") {
       return state.boolValue as boolean
     }
 
@@ -294,15 +347,16 @@ export class WidgetStateManager {
   public setBoolValue(
     widget: WidgetInfo,
     value: boolean,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).boolValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getIntValue(widget: WidgetInfo): number | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "intValue") {
+    if (notNullOrUndefined(state) && state.value === "intValue") {
       return requireNumberInt(state.intValue as number)
     }
 
@@ -312,15 +366,16 @@ export class WidgetStateManager {
   public setIntValue(
     widget: WidgetInfo,
     value: number | null,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).intValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getDoubleValue(widget: WidgetInfo): number | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "doubleValue") {
+    if (notNullOrUndefined(state) && state.value === "doubleValue") {
       return state.doubleValue as number
     }
 
@@ -330,15 +385,16 @@ export class WidgetStateManager {
   public setDoubleValue(
     widget: WidgetInfo,
     value: number | null,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).doubleValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getStringValue(widget: WidgetInfo): string | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "stringValue") {
+    if (notNullOrUndefined(state) && state.value === "stringValue") {
       return state.stringValue as string
     }
 
@@ -347,31 +403,33 @@ export class WidgetStateManager {
 
   public setStringValue(
     widget: WidgetInfo,
-    value: string,
-    source: Source
+    value: string | null,
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).stringValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public setStringArrayValue(
     widget: WidgetInfo,
     value: string[],
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).stringArrayValue = new StringArray({
       data: value,
     })
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getStringArrayValue(widget: WidgetInfo): string[] | undefined {
     const state = this.getWidgetState(widget)
     if (
-      state != null &&
+      notNullOrUndefined(state) &&
       state.value === "stringArrayValue" &&
-      state.stringArrayValue != null &&
-      state.stringArrayValue.data != null
+      notNullOrUndefined(state.stringArrayValue) &&
+      notNullOrUndefined(state.stringArrayValue.data)
     ) {
       return state.stringArrayValue.data
     }
@@ -382,10 +440,10 @@ export class WidgetStateManager {
   public getDoubleArrayValue(widget: WidgetInfo): number[] | undefined {
     const state = this.getWidgetState(widget)
     if (
-      state != null &&
+      notNullOrUndefined(state) &&
       state.value === "doubleArrayValue" &&
-      state.doubleArrayValue != null &&
-      state.doubleArrayValue.data != null
+      notNullOrUndefined(state.doubleArrayValue) &&
+      notNullOrUndefined(state.doubleArrayValue.data)
     ) {
       return state.doubleArrayValue.data
     }
@@ -396,21 +454,22 @@ export class WidgetStateManager {
   public setDoubleArrayValue(
     widget: WidgetInfo,
     value: number[],
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).doubleArrayValue = new DoubleArray({
       data: value,
     })
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getIntArrayValue(widget: WidgetInfo): number[] | undefined {
     const state = this.getWidgetState(widget)
     if (
-      state != null &&
+      notNullOrUndefined(state) &&
       state.value === "intArrayValue" &&
-      state.intArrayValue != null &&
-      state.intArrayValue.data != null
+      notNullOrUndefined(state.intArrayValue) &&
+      notNullOrUndefined(state.intArrayValue.data)
     ) {
       return state.intArrayValue.data.map(requireNumberInt)
     }
@@ -421,43 +480,50 @@ export class WidgetStateManager {
   public setIntArrayValue(
     widget: WidgetInfo,
     value: number[],
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).intArrayValue = new SInt64Array({
       data: value,
     })
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getJsonValue(widget: WidgetInfo): string | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "jsonValue") {
+    if (notNullOrUndefined(state) && state.value === "jsonValue") {
       return state.jsonValue as string
     }
 
     return undefined
   }
 
-  public setJsonValue(widget: WidgetInfo, value: any, source: Source): void {
+  public setJsonValue(
+    widget: WidgetInfo,
+    value: any,
+    source: Source,
+    fragmentId: string | undefined
+  ): void {
     this.createWidgetState(widget, source).jsonValue = JSON.stringify(value)
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public setArrowValue(
     widget: WidgetInfo,
     value: IArrowTable,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).arrowValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getArrowValue(widget: WidgetInfo): IArrowTable | undefined {
     const state = this.getWidgetState(widget)
     if (
-      state != null &&
+      notNullOrUndefined(state) &&
       state.value === "arrowValue" &&
-      state.arrowValue != null
+      notNullOrUndefined(state.arrowValue)
     ) {
       return state.arrowValue
     }
@@ -468,15 +534,16 @@ export class WidgetStateManager {
   public setBytesValue(
     widget: WidgetInfo,
     value: Uint8Array,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).bytesValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getBytesValue(widget: WidgetInfo): Uint8Array | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "bytesValue") {
+    if (notNullOrUndefined(state) && state.value === "bytesValue") {
       return state.bytesValue as Uint8Array
     }
 
@@ -486,17 +553,21 @@ export class WidgetStateManager {
   public setFileUploaderStateValue(
     widget: WidgetInfo,
     value: IFileUploaderState,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     this.createWidgetState(widget, source).fileUploaderStateValue = value
-    this.onWidgetValueChanged(widget.formId, source)
+    this.onWidgetValueChanged(widget.formId, source, fragmentId)
   }
 
   public getFileUploaderStateValue(
     widget: WidgetInfo
   ): IFileUploaderState | undefined {
     const state = this.getWidgetState(widget)
-    if (state != null && state.value === "fileUploaderStateValue") {
+    if (
+      notNullOrUndefined(state) &&
+      state.value === "fileUploaderStateValue"
+    ) {
       return state.fileUploaderStateValue as IFileUploaderState
     }
 
@@ -514,12 +585,13 @@ export class WidgetStateManager {
    */
   private onWidgetValueChanged(
     formId: string | undefined,
-    source: Source
+    source: Source,
+    fragmentId: string | undefined
   ): void {
     if (isValidFormId(formId)) {
       this.syncFormsWithPendingChanges()
     } else if (source.fromUi) {
-      this.sendUpdateWidgetsMessage()
+      this.sendUpdateWidgetsMessage(fragmentId)
     }
   }
 
@@ -540,8 +612,26 @@ export class WidgetStateManager {
     })
   }
 
-  public sendUpdateWidgetsMessage(): void {
-    this.props.sendRerunBackMsg(this.widgetStates.createWidgetStatesMsg())
+  public sendUpdateWidgetsMessage(
+    fragmentId: string | undefined,
+    isAutoRerun: boolean | undefined = undefined
+  ): void {
+    this.props.sendRerunBackMsg(
+      this.widgetStates.createWidgetStatesMsg(),
+      fragmentId,
+      undefined,
+      isAutoRerun
+    )
+  }
+
+  public getActiveWidgetStates(activeIds: Set<string>): WidgetStates {
+    const msg = new WidgetStates()
+    this.widgetStates.forEach(widgetState => {
+      if (activeIds.has(widgetState.id)) {
+        msg.widgets.push(widgetState)
+      }
+    })
+    return msg
   }
 
   /**
@@ -552,6 +642,11 @@ export class WidgetStateManager {
   public removeInactive(activeIds: Set<string>): void {
     this.widgetStates.removeInactive(activeIds)
     this.forms.forEach(form => form.widgetStates.removeInactive(activeIds))
+    this.elementStates.forEach((_, elementId) => {
+      if (!activeIds.has(elementId)) {
+        this.deleteElementState(elementId)
+      }
+    })
   }
 
   /**
@@ -578,7 +673,7 @@ export class WidgetStateManager {
         .get(widget.formId)
         ?.widgetStates.getState(widget.id)
 
-      if (formState != null) {
+      if (notNullOrUndefined(formState)) {
         return formState
       }
     }
@@ -596,7 +691,7 @@ export class WidgetStateManager {
   /** Return the FormState for the given form. Create it if it doesn't exist. */
   private getOrCreateFormState(formId: string): FormState {
     let form = this.forms.get(formId)
-    if (form != null) {
+    if (notNullOrUndefined(form)) {
       return form
     }
 
@@ -606,10 +701,35 @@ export class WidgetStateManager {
   }
 
   /** Store the IDs of all forms with in-progress uploads. */
-  public setFormsWithUploads(formsWithUploads: Set<string>): void {
+  public setFormsWithUploadsInProgress(formsWithUploads: Set<string>): void {
     this.updateFormsData(draft => {
       draft.formsWithUploads = formsWithUploads
     })
+  }
+
+  /**
+   * Helper function to determine whether a form allows enter to submit
+   * for input elements (st.number_input, st.text_input, etc.)
+   * If in form, checks form's enterToSubmit paramf first, otherwise default
+   * behavior: Must have 1st submit button enabled to allow
+   */
+  public allowFormEnterToSubmit(formId: string): boolean {
+    // Don't allow if not in form
+    if (!isValidFormId(formId)) return false
+
+    // Check if user-set enterToSubmit param is false (in FormState)
+    const form = this.forms.get(formId)
+    if (form && !form.enterToSubmit) return false
+
+    // Otherwise, use default behavior
+    const submitButtons = this.formsData.submitButtons.get(formId)
+    const firstSubmitButton = submitButtons?.[0]
+
+    // If no submit buttons for the formId, invalid form
+    if (!firstSubmitButton) return false
+
+    // Allow form submit on enter as long as 1st submit button is not disabled
+    return !firstSubmitButton.disabled
   }
 
   /**
@@ -673,6 +793,47 @@ export class WidgetStateManager {
     if (this.formsData !== newData) {
       this.formsData = newData
       this.props.formsDataChanged(this.formsData)
+    }
+  }
+
+  /**
+   * Get the element state value for the given element ID and key, if it exists.
+   * This is a frontend-only state that is never sent to the server.
+   */
+  public getElementState(elementId: string, key: string): any {
+    return this.elementStates.get(elementId)?.get(key)
+  }
+
+  /**
+   * Sets the state of an element identified by its ID and its key.
+   * This is a frontend-only state that is never sent to the server.
+   * It can be used to store element state to restore the state
+   * of an element in situations where an element is removed and re-added.
+   *
+   * @param {string} elementId - The unique identifier of the element.
+   * @param {string} key - The key to set
+   * @param {any} value - The value to set for the element's state.
+   * @returns {void}
+   */
+  public setElementState(elementId: string, key: string, value: any): void {
+    if (!this.elementStates.has(elementId)) {
+      this.elementStates.set(elementId, new Map<string, any>())
+    }
+
+    // It's expected here that there is always an initialized map for an elementId
+    ;(this.elementStates.get(elementId) as Map<string, any>).set(key, value)
+  }
+
+  /**
+   * Deletes the state associated with a specific element by ID. If a key is provided,
+   * only the state corresponding to that key is removed. If no key is specified, all states
+   * associated with the element ID are removed.
+   */
+  public deleteElementState(elementId: string, key?: string): void {
+    if (notNullOrUndefined(key)) {
+      this.elementStates.get(elementId)?.delete(key)
+    } else {
+      this.elementStates.delete(elementId)
     }
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-import { useEffect, useRef, useCallback, RefObject } from "react"
+import { RefObject, useCallback, useEffect, useRef } from "react"
+
 import useScrollSpy from "./useScrollSpy"
 import useScrollAnimation from "./useScrollAnimation"
 import useStateRef from "./useStateRef"
@@ -90,7 +91,7 @@ export function useScrollToBottom<T extends HTMLElement>(): RefObject<T> {
   }, [ignoreScrollEventBeforeRef, isAnimatingRef, setIsAnimating, setIsSticky])
 
   const handleScroll = useCallback(
-    ({ timeStampLow }) => {
+    ({ timeStampLow }: { timeStampLow: number }) => {
       const { current: target } = scrollableRef
       const animating = isAnimatingRef.current
 
@@ -237,8 +238,12 @@ export function useScrollToBottom<T extends HTMLElement>(): RefObject<T> {
     }
   }, [scrollableRef])
 
+  // TODO: Update to match React best practices
+  // eslint-disable-next-line react-compiler/react-compiler
   useScrollSpy(scrollableRef.current, handleScroll)
   useScrollAnimation(
+    // TODO: Update to match React best practices
+    // eslint-disable-next-line react-compiler/react-compiler
     scrollableRef.current,
     handleScrollToBottomFinished,
     isAnimating

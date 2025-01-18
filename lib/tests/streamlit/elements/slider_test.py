@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,10 +22,10 @@ import pytest
 from parameterized import parameterized
 
 import streamlit as st
+from streamlit.elements.lib.js_number import JSNumber
 from streamlit.errors import StreamlitAPIException
-from streamlit.js_number import JSNumber
 from streamlit.proto.LabelVisibilityMessage_pb2 import LabelVisibilityMessage
-from streamlit.testing.script_interactions import InteractiveScriptTests
+from streamlit.testing.v1.app_test import AppTest
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
 
 
@@ -123,11 +123,11 @@ class SliderTest(DeltaGeneratorTestCase):
 
     @parameterized.expand(
         [
-            (1, 1, 1, 1),
-            (np.int64(1), 1, 1, 1),
-            (1, np.int64(1), 1, 1),
-            (1, 1, np.int64(1), 1),
-            (np.single(0.5), 0.5, 0.5, 0.5),
+            (1, 2, 1, 1),
+            (np.int64(1), 2, 1, 1),
+            (1, np.int64(2), 1, 1),
+            (1, 2, np.int64(1), 1),
+            (np.single(0.5), 1.5, 0.5, 0.5),
         ]
     )
     def test_matching_types(self, min_value, max_value, value, return_value):
@@ -197,9 +197,16 @@ class SliderTest(DeltaGeneratorTestCase):
         ret = st.slider("Slider label", 101, 100, 101)
         c = self.get_delta_from_queue().new_element.slider
 
-        self.assertEqual(ret, 101),
+        (self.assertEqual(ret, 101),)
         self.assertEqual(c.min, 100)
         self.assertEqual(c.max, 101)
+
+    def test_min_equals_max(self):
+        with pytest.raises(StreamlitAPIException):
+            st.slider("oh no", min_value=10, max_value=10)
+        with pytest.raises(StreamlitAPIException):
+            date = datetime(2024, 4, 3)
+            st.slider("datetime", min_value=date, max_value=date)
 
     def test_value_out_of_bounds(self):
         # Max int
@@ -302,19 +309,25 @@ class SliderTest(DeltaGeneratorTestCase):
             "'visible', 'hidden' or 'collapsed'.",
         )
 
+    def test_shows_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.slider("the label"))()
 
-class SliderInteractiveTest(InteractiveScriptTests):
-    def test_id_stability(self):
-        script = self.script_from_string(
-            """
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)
+
+
+def test_id_stability():
+    def script():
         import streamlit as st
 
         st.slider("slider", key="slider")
-        """
-        )
-        sr = script.run()
-        s1 = sr.slider[0]
-        sr2 = s1.set_value(5).run()
-        s2 = sr2.slider[0]
 
-        assert s1.id == s2.id
+    at = AppTest.from_function(script).run()
+    s1 = at.slider[0]
+    at = s1.set_value(5).run()
+    s2 = at.slider[0]
+
+    assert s1.id == s2.id

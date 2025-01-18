@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,47 +15,55 @@
  */
 
 import React from "react"
-import { screen } from "@testing-library/react"
-import { mount, render } from "@streamlit/lib/src/test_util"
+
+import { act, fireEvent, screen, within } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
+import { customRenderLibContext, render } from "@streamlit/lib/src/test_util"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 import {
   DateInput as DateInputProto,
   LabelVisibilityMessage as LabelVisibilityMessageProto,
 } from "@streamlit/lib/src/proto"
 
-import { Datepicker as UIDatePicker } from "baseui/datepicker"
-import { mockTheme } from "@streamlit/lib/src/mocks/mockTheme"
 import DateInput, { Props } from "./DateInput"
 
-const getProps = (elementProps: Partial<DateInputProto> = {}): Props => ({
+const originalDate = "1970/1/20"
+const fullOriginalDate = "1970/01/20"
+const newDate = "2020/02/06"
+
+const getProps = (
+  elementProps: Partial<DateInputProto> = {},
+  widgetProps: Partial<Props> = {}
+): Props => ({
   element: DateInputProto.create({
     id: "1",
     label: "Label",
-    default: ["1970/01/20"],
-    min: "1970/1/20",
+    default: [fullOriginalDate],
+    min: originalDate,
     format: "YYYY/MM/DD",
     ...elementProps,
   }),
   width: 0,
   disabled: false,
-  theme: mockTheme.emotion,
   widgetMgr: new WidgetStateManager({
-    sendRerunBackMsg: jest.fn(),
-    formsDataChanged: jest.fn(),
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
   }),
+  ...widgetProps,
 })
 
 describe("DateInput widget", () => {
   it("renders without crashing", () => {
     const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find(UIDatePicker).length).toBe(1)
+    render(<DateInput {...props} />)
+    expect(screen.getByTestId("stDateInput")).toBeVisible()
   })
 
   it("renders a label", () => {
     const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find("StyledWidgetLabel").text()).toBe(props.element.label)
+    render(<DateInput {...props} />)
+    expect(screen.getByText("Label")).toBeVisible()
   })
 
   it("displays the correct placeholder and value for the provided format", () => {
@@ -63,8 +71,8 @@ describe("DateInput widget", () => {
       format: "DD.MM.YYYY",
     })
     render(<DateInput {...props} />)
-    expect(screen.getByPlaceholderText("DD.MM.YYYY")).toBeDefined()
-    expect(screen.getByDisplayValue("20.01.1970")).toBeDefined()
+    expect(screen.getByPlaceholderText("DD.MM.YYYY")).toBeVisible()
+    expect(screen.getByDisplayValue("20.01.1970")).toBeVisible()
   })
 
   it("pass labelVisibility prop to StyledWidgetLabel correctly when hidden", () => {
@@ -73,9 +81,9 @@ describe("DateInput widget", () => {
         value: LabelVisibilityMessageProto.LabelVisibilityOptions.HIDDEN,
       },
     })
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find("StyledWidgetLabel").prop("labelVisibility")).toEqual(
-      LabelVisibilityMessageProto.LabelVisibilityOptions.HIDDEN
+    render(<DateInput {...props} />)
+    expect(screen.getByTestId("stWidgetLabel")).toHaveStyle(
+      "visibility: hidden"
     )
   })
 
@@ -85,189 +93,283 @@ describe("DateInput widget", () => {
         value: LabelVisibilityMessageProto.LabelVisibilityOptions.COLLAPSED,
       },
     })
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find("StyledWidgetLabel").prop("labelVisibility")).toEqual(
-      LabelVisibilityMessageProto.LabelVisibilityOptions.COLLAPSED
+    render(<DateInput {...props} />)
+    expect(screen.getByTestId("stWidgetLabel")).toHaveStyle("display: none")
+  })
+
+  it("sets widget value on render", () => {
+    const props = getProps()
+    vi.spyOn(props.widgetMgr, "setStringArrayValue")
+
+    render(<DateInput {...props} />)
+    expect(props.widgetMgr.setStringArrayValue).toHaveBeenCalledWith(
+      props.element,
+      [fullOriginalDate],
+      {
+        fromUi: false,
+      },
+      undefined
     )
   })
 
-  it("sets widget value on mount", () => {
-    const props = getProps()
-    jest.spyOn(props.widgetMgr, "setStringArrayValue")
+  it("can pass a fragmentId to setStringArrayValue", () => {
+    const props = getProps(undefined, { fragmentId: "myFragmentId" })
+    vi.spyOn(props.widgetMgr, "setStringArrayValue")
 
-    mount(<DateInput {...props} />)
+    render(<DateInput {...props} />)
     expect(props.widgetMgr.setStringArrayValue).toHaveBeenCalledWith(
       props.element,
-      props.element.default,
+      [fullOriginalDate],
       {
         fromUi: false,
-      }
+      },
+      "myFragmentId"
     )
   })
 
   it("has correct className and style", () => {
     const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
+    render(<DateInput {...props} />)
 
-    const wrappedDiv = wrapper.find("div").first()
-
-    const { className, style } = wrappedDiv.props()
-    // @ts-expect-error
-    const splittedClassName = className.split(" ")
-
-    expect(splittedClassName).toContain("stDateInput")
-
-    // @ts-expect-error
-    expect(style.width).toBe(getProps().width)
+    const dateInput = screen.getByTestId("stDateInput")
+    expect(dateInput).toHaveAttribute("class", "stDateInput")
+    expect(dateInput).toHaveStyle("width: 0px;")
   })
 
   it("renders a default value", () => {
     const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
+    render(<DateInput {...props} />)
 
-    expect(wrapper.find(UIDatePicker).prop("value")).toStrictEqual([
-      new Date(props.element.default[0]),
-    ])
+    expect(screen.getByTestId("stDateInputField")).toHaveValue(
+      fullOriginalDate
+    )
   })
 
   it("can be disabled", () => {
     const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find(UIDatePicker).prop("disabled")).toBe(props.disabled)
-  })
-
-  it("has the correct format", () => {
-    const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find(UIDatePicker).prop("formatString")).toBe("yyyy/MM/dd")
+    render(<DateInput {...props} disabled={true} />)
+    expect(screen.getByTestId("stDateInputField")).toBeDisabled()
   })
 
   it("updates the widget value when it's changed", () => {
     const props = getProps()
-    jest.spyOn(props.widgetMgr, "setStringArrayValue")
+    vi.spyOn(props.widgetMgr, "setStringArrayValue")
 
-    const wrapper = mount(<DateInput {...props} />)
-    const newDate = new Date("2020/02/06")
+    render(<DateInput {...props} />)
+    const datePicker = screen.getByTestId("stDateInputField")
+    // TODO: Utilize user-event instead of fireEvent
+    // eslint-disable-next-line testing-library/prefer-user-event
+    fireEvent.change(datePicker, { target: { value: newDate } })
 
-    // @ts-expect-error
-    wrapper.find(UIDatePicker).prop("onChange")({
-      date: newDate,
-    })
-    wrapper.update()
-
-    expect(wrapper.find(UIDatePicker).prop("value")).toStrictEqual([newDate])
+    expect(screen.getByTestId("stDateInputField")).toHaveValue(newDate)
     expect(props.widgetMgr.setStringArrayValue).toHaveBeenCalledWith(
       props.element,
-      ["2020/02/06"],
+      [newDate],
       {
         fromUi: true,
-      }
+      },
+      undefined
     )
   })
 
-  it("reset it's value to default when it closed with empty input", () => {
+  it("resets its value to default when it's closed with empty input", () => {
     const props = getProps()
-    jest.spyOn(props.widgetMgr, "setStringArrayValue")
+    vi.spyOn(props.widgetMgr, "setStringArrayValue")
 
-    const wrapper = mount(<DateInput {...props} />)
-    const newDate = new Date("2020/02/06")
+    render(<DateInput {...props} />)
+    const dateInput = screen.getByTestId("stDateInputField")
 
-    // @ts-expect-error
-    wrapper.find(UIDatePicker).prop("onChange")({
-      date: newDate,
+    // TODO: Utilize user-event instead of fireEvent
+    // eslint-disable-next-line testing-library/prefer-user-event
+    fireEvent.change(dateInput, {
+      target: { value: newDate },
     })
-    wrapper.update()
 
-    expect(wrapper.find(UIDatePicker).prop("value")).toStrictEqual([newDate])
-    // @ts-expect-error
-    wrapper.find(UIDatePicker).prop("onChange")({
-      date: null,
+    expect(dateInput).toHaveValue(newDate)
+
+    // Simulating clearing the date input
+    // TODO: Utilize user-event instead of fireEvent
+    // eslint-disable-next-line testing-library/prefer-user-event
+    fireEvent.change(dateInput, {
+      target: { value: null },
     })
-    // @ts-expect-error
-    wrapper.find(UIDatePicker).prop("onClose")()
-    wrapper.update()
-    expect(wrapper.find(UIDatePicker).prop("value")).toStrictEqual([
-      new Date("1970/1/20"),
-    ])
+
+    // Simulating the close action
+    fireEvent.blur(dateInput)
+    expect(dateInput).toHaveValue(fullOriginalDate)
   })
 
-  it("has a minDate", () => {
-    const props = getProps()
-    const wrapper = mount(<DateInput {...props} />)
-    expect(wrapper.find(UIDatePicker).prop("minDate")).toStrictEqual(
-      new Date("1970/1/20")
-    )
-    expect(wrapper.find(UIDatePicker).prop("maxDate")).toBeUndefined()
+  it("has a minDate", async () => {
+    const user = userEvent.setup()
+    const props = getProps({})
+
+    render(<DateInput {...props} />)
+
+    const dateInput = screen.getByTestId("stDateInputField")
+    await user.click(dateInput)
+
+    expect(
+      screen.getByLabelText("Not available. Monday, January 19th 1970.")
+    ).toBeTruthy()
+    expect(
+      screen.getByLabelText(
+        "Selected. Tuesday, January 20th 1970. It's available."
+      )
+    ).toBeTruthy()
   })
 
-  it("has a maxDate if it is passed", () => {
-    const props = getProps({ max: "2030/02/06" })
-    const wrapper = mount(<DateInput {...props} />)
+  it("has a minDate if passed", async () => {
+    const user = userEvent.setup()
+    const props = getProps({
+      min: "2020/01/05",
+      // Choose default so min is in the default page when the widget is opened.
+      default: ["2020/01/15"],
+    })
 
-    expect(wrapper.find(UIDatePicker).prop("maxDate")).toStrictEqual(
-      new Date("2030/02/06")
-    )
+    render(<DateInput {...props} />)
+
+    const dateInput = screen.getByTestId("stDateInputField")
+    await user.click(dateInput)
+
+    expect(
+      screen.getByLabelText("Not available. Saturday, January 4th 2020.")
+    ).toBeTruthy()
+
+    expect(
+      screen.getByLabelText("Choose Sunday, January 5th 2020. It's available.")
+    ).toBeTruthy()
   })
 
-  it("handles min dates with years less than 100", () => {
-    const props = getProps({ min: "0001/01/01" })
-    const wrapper = mount(<DateInput {...props} />)
+  it("has a maxDate if it is passed", async () => {
+    const user = userEvent.setup()
+    const props = getProps({
+      max: "2020/01/25",
+      // Choose default so min is in the default page when the widget is opened.
+      default: ["2020/01/15"],
+    })
 
-    expect(wrapper.find(UIDatePicker).prop("minDate")).toStrictEqual(
-      new Date("0001-01-01T00:00:00")
-    )
-  })
+    render(<DateInput {...props} />)
 
-  it("handles max dates with years less than 100", () => {
-    const props = getProps({ max: "0001/01/01" })
-    const wrapper = mount(<DateInput {...props} />)
+    const dateInput = screen.getByTestId("stDateInputField")
+    await user.click(dateInput)
 
-    expect(wrapper.find(UIDatePicker).prop("maxDate")).toStrictEqual(
-      new Date("0001-01-01T00:00:00")
-    )
+    expect(
+      screen.getByLabelText(
+        "Choose Saturday, January 25th 2020. It's available."
+      )
+    ).toBeTruthy()
+
+    expect(
+      screen.getByLabelText("Not available. Sunday, January 26th 2020.")
+    ).toBeTruthy()
   })
 
   it("resets its value when form is cleared", () => {
     // Create a widget in a clearOnSubmit form
     const props = getProps({ formId: "form" })
-    props.widgetMgr.setFormClearOnSubmit("form", true)
+    props.widgetMgr.setFormSubmitBehaviors("form", true)
 
-    jest.spyOn(props.widgetMgr, "setStringArrayValue")
+    vi.spyOn(props.widgetMgr, "setStringArrayValue")
 
-    const wrapper = mount(<DateInput {...props} />)
+    render(<DateInput {...props} />)
 
-    // Change the widget value
-    const newDate = new Date("2020/02/06")
-
-    // @ts-expect-error
-    wrapper.find(UIDatePicker).prop("onChange")({
-      date: newDate,
+    const dateInput = screen.getByTestId("stDateInputField")
+    // TODO: Utilize user-event instead of fireEvent
+    // eslint-disable-next-line testing-library/prefer-user-event
+    fireEvent.change(dateInput, {
+      target: { value: newDate },
     })
-    wrapper.update()
 
-    expect(wrapper.find(UIDatePicker).prop("value")).toStrictEqual([newDate])
+    expect(dateInput).toHaveValue(newDate)
     expect(props.widgetMgr.setStringArrayValue).toHaveBeenCalledWith(
       props.element,
-      ["2020/02/06"],
+      [newDate],
       {
         fromUi: true,
-      }
+      },
+      undefined
     )
 
-    // "Submit" the form
-    props.widgetMgr.submitForm("form")
-    wrapper.update()
+    act(() => {
+      // "Submit" the form
+      props.widgetMgr.submitForm("form", undefined)
+    })
 
     // Our widget should be reset, and the widgetMgr should be updated
-    expect(wrapper.find(UIDatePicker).prop("value")).toStrictEqual(
-      props.element.default.map(value => new Date(value))
-    )
+    expect(dateInput).toHaveValue(fullOriginalDate)
     expect(props.widgetMgr.setStringArrayValue).toHaveBeenLastCalledWith(
       props.element,
-      props.element.default,
+      [fullOriginalDate],
       {
         fromUi: true,
-      }
+      },
+      undefined
     )
+  })
+
+  describe("localization", () => {
+    const getCalendarHeader = async (): Promise<HTMLElement> => {
+      const calendar = await screen.findByLabelText("Calendar.")
+      const presentations = await within(calendar).findAllByRole(
+        "presentation"
+      )
+      return presentations[presentations.length - 1]
+    }
+
+    describe("with a locale whose week starts on Monday", () => {
+      const locale = "de"
+
+      it("renders expected week day ordering", async () => {
+        const user = userEvent.setup()
+        const props = getProps()
+        customRenderLibContext(<DateInput {...props} />, { locale })
+
+        await user.click(await screen.findByLabelText("Select a date."))
+
+        expect(await getCalendarHeader()).toHaveTextContent("MoTuWeThFrSaSu")
+      })
+    })
+
+    describe("with a locale whose week starts on Saturday", () => {
+      const locale = "ar"
+
+      it("renders expected week day ordering", async () => {
+        const user = userEvent.setup()
+        const props = getProps()
+        customRenderLibContext(<DateInput {...props} />, { locale })
+
+        await user.click(await screen.findByLabelText("Select a date."))
+
+        expect(await getCalendarHeader()).toHaveTextContent("SaSuMoTuWeThFr")
+      })
+    })
+
+    describe("with a locale whose week starts on Sunday", () => {
+      const locale = "en-US"
+
+      it("renders expected week day ordering", async () => {
+        const user = userEvent.setup()
+        const props = getProps()
+        customRenderLibContext(<DateInput {...props} />, { locale })
+
+        await user.click(await screen.findByLabelText("Select a date."))
+
+        expect(await getCalendarHeader()).toHaveTextContent("SuMoTuWeThFrSa")
+      })
+    })
+
+    describe("with an invalid locale", () => {
+      const locale = "does-not-exist"
+
+      it("falls back to en-US locale", async () => {
+        const user = userEvent.setup()
+        const props = getProps()
+        customRenderLibContext(<DateInput {...props} />, { locale })
+
+        await user.click(await screen.findByLabelText("Select a date."))
+
+        expect(await getCalendarHeader()).toHaveTextContent("SuMoTuWeThFrSa")
+      })
+    })
   })
 })

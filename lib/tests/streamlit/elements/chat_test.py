@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,12 @@ import pytest
 from parameterized import parameterized
 
 import streamlit as st
-from streamlit.elements.utils import SESSION_STATE_WRITES_NOT_ALLOWED_ERROR_TEXT
-from streamlit.elements.widgets.chat import DISALLOWED_CONTAINERS_ERROR_TEXT
-from streamlit.errors import StreamlitAPIException
+from streamlit.errors import (
+    StreamlitAPIException,
+    StreamlitValueAssignmentNotAllowedError,
+)
 from streamlit.proto.Block_pb2 import Block as BlockProto
-from streamlit.proto.ChatInput_pb2 import ChatInput as ChatInputProto
+from streamlit.proto.RootContainer_pb2 import RootContainer as RootContainerProto
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
 
 
@@ -160,7 +161,6 @@ class ChatTest(DeltaGeneratorTestCase):
         self.assertEqual(c.set_value, False)
         self.assertEqual(c.max_chars, 0)
         self.assertEqual(c.disabled, False)
-        self.assertEqual(c.position, ChatInputProto.Position.BOTTOM)
 
     def test_chat_input_disabled(self):
         """Test that it sets disabled correctly."""
@@ -173,7 +173,6 @@ class ChatTest(DeltaGeneratorTestCase):
         self.assertEqual(c.set_value, False)
         self.assertEqual(c.max_chars, 0)
         self.assertEqual(c.disabled, True)
-        self.assertEqual(c.position, ChatInputProto.Position.BOTTOM)
 
     def test_chat_input_max_chars(self):
         """Test that it sets max chars correctly."""
@@ -186,25 +185,15 @@ class ChatTest(DeltaGeneratorTestCase):
         self.assertEqual(c.set_value, False)
         self.assertEqual(c.max_chars, 100)
         self.assertEqual(c.disabled, False)
-        self.assertEqual(c.position, ChatInputProto.Position.BOTTOM)
 
-    @parameterized.expand(
-        [
-            lambda: st.columns(2)[0],
-            lambda: st.tabs(["Tab1", "Tab2"])[0],
-            lambda: st.expander("Expand Me"),
-            lambda: st.form("Form Key"),
-            lambda: st.sidebar,
-        ]
-    )
-    def test_chat_not_allowed_in_containers(self, container_call):
-        """Test that it disallows being called in containers."""
+    def test_chat_not_allowed_in_form(self):
+        """Test that it disallows being called in a form."""
         with pytest.raises(StreamlitAPIException) as exception_message:
-            container_call().chat_input("Placeholder")
+            st.form("Form Key").chat_input("Placeholder")
 
         self.assertEqual(
-            DISALLOWED_CONTAINERS_ERROR_TEXT,
             str(exception_message.value),
+            "`st.chat_input()` can't be used in a `st.form()`.",
         )
 
     @parameterized.expand(
@@ -212,28 +201,46 @@ class ChatTest(DeltaGeneratorTestCase):
             lambda: st.columns(2)[0],
             lambda: st.tabs(["Tab1", "Tab2"])[0],
             lambda: st.expander("Expand Me"),
-            lambda: st.form("Form Key"),
+            lambda: st.chat_message("user"),
             lambda: st.sidebar,
+            lambda: st.container(),
         ]
     )
-    def test_chat_not_allowed_in_with_containers(self, container_call):
-        """Test that it disallows being called in containers (using with syntax)."""
-        with pytest.raises(StreamlitAPIException) as exception_message:
-            with container_call():
-                st.chat_input("Placeholder")
+    def test_chat_selects_inline_postion(self, container_call):
+        """Test that it selects inline position when nested in any of layout containers."""
+        container_call().chat_input("Placeholder")
+
+        self.assertNotEqual(
+            self.get_message_from_queue().metadata.delta_path[0],
+            RootContainerProto.BOTTOM,
+        )
+
+    @parameterized.expand(
+        [
+            lambda: st,
+            lambda: st._main,
+        ]
+    )
+    def test_chat_selects_bottom_position(self, container_call):
+        """Test that it selects bottom position when called in the main dg."""
+        container_call().chat_input("Placeholder")
 
         self.assertEqual(
-            DISALLOWED_CONTAINERS_ERROR_TEXT,
-            str(exception_message.value),
+            self.get_message_from_queue().metadata.delta_path[0],
+            RootContainerProto.BOTTOM,
         )
 
     def test_session_state_rules(self):
         """Test that it disallows being called in containers (using with syntax)."""
-        with pytest.raises(StreamlitAPIException) as exception_message:
+        with self.assertRaises(StreamlitValueAssignmentNotAllowedError):
             st.session_state.my_key = "Foo"
             st.chat_input("Placeholder", key="my_key")
 
-        self.assertEqual(
-            SESSION_STATE_WRITES_NOT_ALLOWED_ERROR_TEXT,
-            str(exception_message.value),
-        )
+    def test_chat_input_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.chat_input("the label"))()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)

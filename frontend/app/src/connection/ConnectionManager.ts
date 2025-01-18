@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,15 @@
 import { ReactNode } from "react"
 
 import {
-  IAllowedMessageOriginsResponse,
+  BackMsg,
   BaseUriParts,
+  ensureError,
+  ForwardMsg,
   getPossibleBaseUris,
+  IHostConfigResponse,
   logError,
   SessionInfo,
   StreamlitEndpoints,
-  ensureError,
-  BackMsg,
-  ForwardMsg,
 } from "@streamlit/lib"
 
 import { ConnectionState } from "./ConnectionState"
@@ -75,10 +75,10 @@ interface Props {
   resetHostAuthToken: () => void
 
   /**
-   * Function to set the list of origins that this app should accept
-   * cross-origin messages from (if in a relevant deployment scenario).
+   * Function to set the host config for this app (if in a relevant deployment
+   * scenario).
    */
-  setAllowedOriginsResp: (resp: IAllowedMessageOriginsResponse) => void
+  onHostConfigResp: (resp: IHostConfigResponse) => void
 }
 
 /**
@@ -192,7 +192,7 @@ export class ConnectionManager {
       onRetry: this.showRetryError,
       claimHostAuthToken: this.props.claimHostAuthToken,
       resetHostAuthToken: this.props.resetHostAuthToken,
-      setAllowedOriginsResp: this.props.setAllowedOriginsResp,
+      onHostConfigResp: this.props.onHostConfigResp,
     })
   }
 }

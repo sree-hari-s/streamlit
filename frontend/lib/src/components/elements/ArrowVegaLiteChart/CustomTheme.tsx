@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,18 @@
  * limitations under the License.
  */
 
-import { merge, mergeWith, isArray } from "lodash"
+import merge from "lodash/merge"
+import mergeWith from "lodash/mergeWith"
 
 import {
-  getGray30,
-  getGray70,
-  hasLightBackgroundColor,
+  convertRemToPx,
+  EmotionTheme,
+  getBlue80,
   getCategoricalColorsArray,
   getDivergingColorsArray,
+  getGray30,
+  getGray70,
   getSequentialColorsArray,
-  EmotionTheme,
 } from "@streamlit/lib/src/theme"
 
 export function applyStreamlitTheme(config: any, theme: EmotionTheme): any {
@@ -42,7 +44,7 @@ export function applyStreamlitTheme(config: any, theme: EmotionTheme): any {
       color: theme.colors.headingColor,
       titleFontStyle: "normal",
       fontWeight: theme.fontWeights.bold,
-      fontSize: theme.fontSizes.smPx + 2,
+      fontSize: theme.fontSizes.mdPx,
       orient: "top",
       offset: 26,
     },
@@ -74,9 +76,9 @@ export function applyStreamlitTheme(config: any, theme: EmotionTheme): any {
       labelFlushOffset: 1,
       labelBound: false,
       labelLimit: 100,
-      titlePadding: theme.spacing.lgPx,
-      labelPadding: theme.spacing.lgPx,
-      labelSeparation: theme.spacing.twoXSPx,
+      titlePadding: convertRemToPx(theme.spacing.lg),
+      labelPadding: convertRemToPx(theme.spacing.lg),
+      labelSeparation: convertRemToPx(theme.spacing.twoXS),
       labelOverlap: true,
     },
     legend: {
@@ -88,9 +90,10 @@ export function applyStreamlitTheme(config: any, theme: EmotionTheme): any {
       titleFontStyle: "normal",
       titleColor: getGray70(theme),
       titlePadding: 5,
-      labelPadding: theme.spacing.lgPx,
-      columnPadding: theme.spacing.smPx,
-      rowPadding: theme.spacing.twoXSPx,
+      labelPadding: convertRemToPx(theme.spacing.lg),
+      columnPadding: convertRemToPx(theme.spacing.sm),
+      rowPadding: convertRemToPx(theme.spacing.twoXS),
+      // eslint-disable-next-line streamlit-custom/no-hardcoded-theme-values
       padding: 7,
       symbolStrokeWidth: 4,
     },
@@ -115,12 +118,10 @@ export function applyStreamlitTheme(config: any, theme: EmotionTheme): any {
     },
     mark: {
       tooltip: true,
-      ...(hasLightBackgroundColor(theme)
-        ? { color: "#0068C9" }
-        : { color: "#83C9FF" }),
+      color: getBlue80(theme),
     },
     bar: {
-      binSpacing: theme.spacing.twoXSPx,
+      binSpacing: convertRemToPx(theme.spacing.twoXS),
       discreteBandSize: { band: 0.85 },
     },
     axisDiscrete: {
@@ -143,7 +144,7 @@ export function applyStreamlitTheme(config: any, theme: EmotionTheme): any {
 
   // Fill in theme defaults where the user didn't specify config options.
   return mergeWith({}, streamlitTheme, config, (_, b) =>
-    isArray(b) ? b : undefined
+    Array.isArray(b) ? b : undefined
   )
 }
 

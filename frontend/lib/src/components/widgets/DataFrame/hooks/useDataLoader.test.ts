@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,47 +16,81 @@
 
 import React from "react"
 
-import { renderHook } from "@testing-library/react-hooks"
 import { GridCellKind } from "@glideapps/glide-data-grid"
+import { renderHook } from "@testing-library/react-hooks"
+import { Field, Utf8 } from "apache-arrow"
 
-import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
-import { Arrow as ArrowProto } from "@streamlit/lib/src/proto"
-import { UNICODE } from "@streamlit/lib/src/mocks/arrow"
 import {
   BaseColumn,
-  TextColumn,
   isErrorCell,
+  TextColumn,
 } from "@streamlit/lib/src/components/widgets/DataFrame/columns"
 import EditingState from "@streamlit/lib/src/components/widgets/DataFrame/EditingState"
+import { DataFrameCellType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
+import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
+import { MULTI, UNICODE } from "@streamlit/lib/src/mocks/arrow"
+import { Arrow as ArrowProto } from "@streamlit/lib/src/proto"
 
 import useDataLoader from "./useDataLoader"
 
 // These columns are based on the UNICODE mock arrow table:
 const MOCK_COLUMNS: BaseColumn[] = [
   TextColumn({
-    arrowType: { meta: null, numpy_type: "object", pandas_type: "unicode" },
+    arrowType: {
+      type: DataFrameCellType.DATA,
+      arrowField: new Field("index-0", new Utf8(), true),
+      pandasType: {
+        field_name: "index-0",
+        name: "index-0",
+        pandas_type: "unicode",
+        numpy_type: "unicode",
+        metadata: null,
+      },
+    },
     id: "index-0",
     name: "",
     indexNumber: 0,
     isEditable: true,
     isHidden: false,
     isIndex: true,
+    isPinned: true,
     isStretched: false,
     title: "",
   }),
   TextColumn({
-    arrowType: { meta: null, numpy_type: "object", pandas_type: "unicode" },
+    arrowType: {
+      type: DataFrameCellType.DATA,
+      arrowField: new Field("column-c1-0", new Utf8(), true),
+      pandasType: {
+        field_name: "column-c1-0",
+        name: "column-c1-0",
+        pandas_type: "unicode",
+        numpy_type: "object",
+        metadata: null,
+      },
+    },
     id: "column-c1-0",
     name: "c1",
     indexNumber: 1,
     isEditable: true,
     isHidden: false,
     isIndex: false,
+    isPinned: false,
     isStretched: false,
     title: "c1",
   }),
   TextColumn({
-    arrowType: { meta: null, numpy_type: "object", pandas_type: "unicode" },
+    arrowType: {
+      type: DataFrameCellType.DATA,
+      arrowField: new Field("column-c2-1", new Utf8(), true),
+      pandasType: {
+        field_name: "column-c2-1",
+        name: "column-c2-1",
+        pandas_type: "unicode",
+        numpy_type: "object",
+        metadata: null,
+      },
+    },
     columnTypeOptions: undefined,
     id: "column-c2-1",
     name: "c2",
@@ -64,6 +98,7 @@ const MOCK_COLUMNS: BaseColumn[] = [
     isEditable: true,
     isHidden: false,
     isIndex: false,
+    isPinned: false,
     isStretched: false,
     title: "c2",
   }),
@@ -75,7 +110,7 @@ describe("useDataLoader hook", () => {
       data: UNICODE,
     })
     const data = new Quiver(element)
-    const numRows = data.dimensions.rows
+    const numRows = data.dimensions.numRows
 
     const { result } = renderHook(() => {
       const editingState = React.useRef<EditingState>(
@@ -113,6 +148,26 @@ describe("useDataLoader hook", () => {
     expect(isErrorCell(result.current.getCellContent([3, 0]))).toBe(true)
   })
 
+  it("correctly handles multi-index headers", () => {
+    const element = ArrowProto.create({
+      data: MULTI,
+    })
+    const data = new Quiver(element)
+    const numRows = data.dimensions.numRows
+
+    const { result } = renderHook(() => {
+      const editingState = React.useRef<EditingState>(
+        new EditingState(numRows)
+      )
+      return useDataLoader(data, MOCK_COLUMNS, numRows, editingState)
+    })
+
+    // Check that row 0 is returning the correct cell value:
+    expect(
+      MOCK_COLUMNS[0].getCellValue(result.current.getCellContent([2, 0]))
+    ).toBe("foo")
+  })
+
   it("uses editing state if a cell got edited", () => {
     const element = ArrowProto.create({
       data: UNICODE,
@@ -120,7 +175,7 @@ describe("useDataLoader hook", () => {
     })
 
     const data = new Quiver(element)
-    const numRows = data.dimensions.rows
+    const numRows = data.dimensions.numRows
 
     const { result } = renderHook(() => {
       const editingState = React.useRef<EditingState>(
@@ -148,7 +203,7 @@ describe("useDataLoader hook", () => {
     })
 
     const data = new Quiver(element)
-    const numRows = data.dimensions.rows
+    const numRows = data.dimensions.numRows
 
     const { result } = renderHook(() => {
       const editingState = React.useRef<EditingState>(

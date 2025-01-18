@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 # limitations under the License.
 
 """Send slack notifications"""
+
 import os
 import sys
 
@@ -33,7 +34,7 @@ def send_notification():
         "python": "on python tests",
         "js": "on javascript tests",
         "py_prod": "on python prod dependencies test",
-        "cypress": "on cypress tests",
+        "playwright": "on playwright tests",
         "build": "to release",
     }
 
@@ -74,7 +75,6 @@ def send_notification():
 
 
 def main():
-
     send_notification()
 
 

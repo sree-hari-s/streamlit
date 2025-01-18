@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,23 @@
  */
 
 import React, { ReactElement, ReactNode, useEffect } from "react"
-import { ToasterContainer, toaster, PLACEMENT } from "baseui/toast"
+
+import { PLACEMENT, toaster, ToasterContainer } from "baseui/toast"
+import { useTheme } from "@emotion/react"
+
+import { EmotionTheme } from "@streamlit/lib"
 
 export interface EventContainerProps {
-  toastAdjustment: boolean
   scriptRunId: string
   children?: ReactNode
 }
 
 function EventContainer({
-  toastAdjustment,
   scriptRunId,
   children,
-}: EventContainerProps): ReactElement {
+}: Readonly<EventContainerProps>): ReactElement {
+  const theme: EmotionTheme = useTheme()
+
   useEffect(() => {
     // Ensure all toasts cleared on script re-run
     toaster.getRef()?.clearAll()
@@ -36,18 +40,18 @@ function EventContainer({
   return (
     <>
       <ToasterContainer
-        placement={PLACEMENT.bottomRight}
+        placement={PLACEMENT.topRight}
         autoHideDuration={4 * 1000} // in milliseconds
         overrides={{
           Root: {
             style: {
-              // Avoids blocking host elements at bottom of page
-              bottom: toastAdjustment ? "45px" : "0px",
-              // Toasts overlap chatInput container
-              zIndex: 100,
+              // Avoids blocking the header
+              top: theme.sizes.headerHeight,
+              zIndex: theme.zIndices.toast,
             },
             props: {
-              "data-testid": "toastContainer",
+              "data-testid": "stToastContainer",
+              className: "stToastContainer",
             },
           },
         }}

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,18 +14,25 @@
  * limitations under the License.
  */
 
-import React from "react"
-import ReactDOM from "react-dom"
+// Timestamp when the Streamlit execution started for GUEST_READY message
+const streamlitExecutionStartedAt = Date.now()
 
+import React from "react"
+
+import ReactDOM from "react-dom"
 import { Client as Styletron } from "styletron-engine-atomic"
 import { Provider as StyletronProvider } from "styletron-react"
+
 import ThemedApp from "./ThemedApp"
 
 const engine = new Styletron({ prefix: "st-" })
 
+// TODO: Deprecated in React 18 - Need to revise to new API
+// react-18-upgrade
+// eslint-disable-next-line react/no-deprecated
 ReactDOM.render(
   <StyletronProvider value={engine}>
-    <ThemedApp />
+    <ThemedApp streamlitExecutionStartedAt={streamlitExecutionStartedAt} />
   </StyletronProvider>,
   document.getElementById("root")
 )

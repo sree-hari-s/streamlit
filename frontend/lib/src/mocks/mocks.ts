@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
  */
 
 import {
-  Props as SessionInfoProps,
   SessionInfo,
+  Props as SessionInfoProps,
 } from "@streamlit/lib/src/SessionInfo"
 import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
+import { IAppPage } from "@streamlit/lib/src/proto"
 
 /** Create mock SessionInfo.props */
 export function mockSessionInfoProps(
@@ -32,8 +33,7 @@ export function mockSessionInfoProps(
     installationId: "mockInstallationId",
     installationIdV3: "mockInstallationIdV3",
     maxCachedMessageAge: 123,
-    commandLine: "mockCommandLine",
-    userMapboxToken: "mockUserMapboxToken",
+    isHello: false,
     ...overrides,
   }
 }
@@ -52,19 +52,29 @@ export function mockEndpoints(
   overrides: Partial<StreamlitEndpoints> = {}
 ): StreamlitEndpoints {
   return {
-    buildComponentURL: jest.fn(),
-    buildMediaURL: jest.fn(),
-    buildFileUploadURL: jest.fn(),
-    buildAppPageURL: jest.fn(),
-    uploadFileUploaderFile: jest
+    buildComponentURL: vi.fn(),
+    buildMediaURL: vi.fn(),
+    buildFileUploadURL: vi.fn(),
+    buildAppPageURL: vi
+      .fn()
+      .mockImplementation(
+        (pageLinkBaseURL: string, page: IAppPage, pageIndex: number) => {
+          return `http://mock/app/page/${page.pageName}.${pageIndex}`
+        }
+      ),
+    uploadFileUploaderFile: vi
       .fn()
       .mockRejectedValue(new Error("unimplemented mock endpoint")),
-    deleteFileAtURL: jest
+    deleteFileAtURL: vi
       .fn()
       .mockRejectedValue(new Error("unimplemented mock endpoint")),
-    fetchCachedForwardMsg: jest
+    fetchCachedForwardMsg: vi
       .fn()
       .mockRejectedValue(new Error("unimplemented mock endpoint")),
     ...overrides,
   }
+}
+
+export function mockConvertRemToPx(scssVar: string): number {
+  return Number(scssVar.replace("rem", "")) * 16
 }

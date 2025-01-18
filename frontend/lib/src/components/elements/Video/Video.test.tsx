@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,27 @@
  */
 
 import React from "react"
-import { mount, shallow } from "@streamlit/lib/src/test_util"
+
+import { screen } from "@testing-library/react"
+
+import { render } from "@streamlit/lib/src/test_util"
 import { Video as VideoProto } from "@streamlit/lib/src/proto"
 import { mockEndpoints } from "@streamlit/lib/src/mocks/mocks"
+import { WidgetStateManager as ElementStateManager } from "@streamlit/lib/src/WidgetStateManager"
 
 import Video, { VideoProps } from "./Video"
 
 describe("Video Element", () => {
-  const buildMediaURL = jest.fn().mockReturnValue("https://mock.media.url")
+  const buildMediaURL = vi.fn().mockReturnValue("https://mock.media.url")
+
+  const mockSetElementState = vi.fn()
+  const mockGetElementState = vi.fn()
+  const elementMgrMock = {
+    setElementState: mockSetElementState,
+    getElementState: mockGetElementState,
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
+  }
 
   const getProps = (elementProps: Partial<VideoProto> = {}): VideoProps => ({
     element: VideoProto.create({
@@ -33,45 +46,86 @@ describe("Video Element", () => {
     }),
     endpoints: mockEndpoints({ buildMediaURL: buildMediaURL }),
     width: 0,
+    elementMgr: elementMgrMock as unknown as ElementStateManager,
   })
 
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it("renders without crashing", () => {
     const props = getProps()
-    const wrapper = mount(<Video {...props} />)
+    render(<Video {...props} />)
 
-    expect(wrapper.find("video").length).toBe(1)
+    const videoElement = screen.getByTestId("stVideo")
+    expect(videoElement).toBeInTheDocument()
+    expect(videoElement).toHaveClass("stVideo")
   })
 
   it("has correct style", () => {
     const props = getProps()
-    const wrapper = mount(<Video {...props} />)
-    const videoWrapper = wrapper.find("video")
+    render(<Video {...props} />)
+    const video = screen.getByTestId("stVideo")
 
-    expect(videoWrapper.prop("className")).toContain("stVideo")
-    expect(videoWrapper.prop("style")).toStrictEqual({
-      width: props.width,
-      height: 528,
-    })
+    expect(video).toHaveAttribute("class", "stVideo")
+    expect(video).toHaveStyle("width: 0px; height: 528px;")
   })
 
   it("has controls", () => {
     const props = getProps()
-    const wrapper = mount(<Video {...props} />)
+    render(<Video {...props} />)
 
-    expect(wrapper.find("video").prop("controls")).toBeDefined()
+    expect(screen.getByTestId("stVideo")).toHaveAttribute("controls")
   })
 
   it("creates its `src` attribute using buildMediaURL", () => {
-    const wrapper = shallow(
-      <Video {...getProps({ url: "/media/mockVideoFile.mp4" })} />
-    )
-    const videoElement = wrapper.find("video")
+    render(<Video {...getProps({ url: "/media/mockVideoFile.mp4" })} />)
     expect(buildMediaURL).toHaveBeenCalledWith("/media/mockVideoFile.mp4")
-    expect(videoElement.prop("src")).toBe("https://mock.media.url")
+    expect(screen.getByTestId("stVideo")).toHaveAttribute(
+      "src",
+      "https://mock.media.url"
+    )
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetElementState.mockReturnValue(false) // By default, assume autoplay is not prevented
+  })
+
+  it("does not autoplay if preventAutoplay is set", () => {
+    mockGetElementState.mockReturnValueOnce(true) // Autoplay should be prevented
+    const props = getProps({ autoplay: true, id: "uniqueVideoId" })
+    render(<Video {...props} />)
+    const audioElement = screen.getByTestId("stVideo")
+    expect(audioElement).not.toHaveAttribute("autoPlay")
+  })
+
+  it("autoplays if preventAutoplay is not set and autoplay is true", () => {
+    mockGetElementState.mockReturnValueOnce(false) // Autoplay is not prevented
+    const props = getProps({ autoplay: true, id: "uniqueVideoId" })
+    render(<Video {...props} />)
+    const audioElement = screen.getByTestId("stVideo")
+    expect(audioElement).toHaveAttribute("autoPlay")
+  })
+
+  it("calls setElementState to prevent future autoplay on first autoplay", () => {
+    mockGetElementState.mockReturnValueOnce(false) // Autoplay is not prevented initially
+    const props = getProps({ autoplay: true, id: "uniqueVideoId" })
+    render(<Video {...props} />)
+    expect(mockSetElementState).toHaveBeenCalledTimes(1)
+    expect(mockSetElementState).toHaveBeenCalledWith(
+      props.element.id,
+      "preventAutoplay",
+      true
+    )
+  })
+
+  // Test to ensure that setElementState is not called again if autoplay is already prevented
+  it("does not call setElementState again if autoplay is already prevented", () => {
+    mockGetElementState.mockReturnValueOnce(true) // Autoplay is already prevented
+    const props = getProps({ autoplay: true, id: "uniqueVideoId" })
+    render(<Video {...props} />)
+    expect(mockSetElementState).not.toHaveBeenCalled()
   })
 
   describe("YouTube", () => {
@@ -79,10 +133,13 @@ describe("Video Element", () => {
       const props = getProps({
         type: VideoProto.Type.YOUTUBE_IFRAME,
       })
-      const wrapper = mount(<Video {...props} />)
-      const iframeWrapper = wrapper.find("iframe")
-
-      expect(iframeWrapper.props()).toMatchSnapshot()
+      render(<Video {...props} />)
+      const videoElement = screen.getByTestId("stVideo")
+      expect(videoElement).toBeInstanceOf(HTMLIFrameElement)
+      expect(videoElement).toHaveAttribute(
+        "src",
+        "https://www.w3schools.com/html/mov_bbb.mp4"
+      )
     })
 
     it("renders a youtube iframe with an starting time", () => {
@@ -90,26 +147,31 @@ describe("Video Element", () => {
         type: VideoProto.Type.YOUTUBE_IFRAME,
         startTime: 10,
       })
-      const wrapper = mount(<Video {...props} />)
-      const iframeWrapper = wrapper.find("iframe")
-
-      expect(iframeWrapper.props()).toMatchSnapshot()
+      render(<Video {...props} />)
+      const videoElement = screen.getByTestId("stVideo")
+      expect(videoElement).toBeInstanceOf(HTMLIFrameElement)
+      expect(videoElement).toHaveAttribute(
+        "src",
+        "https://www.w3schools.com/html/mov_bbb.mp4?start=10"
+      )
     })
   })
 
   describe("updateTime", () => {
     const props = getProps()
-    const wrapper = mount(<Video {...props} />)
-    const videoElement: HTMLVideoElement = wrapper.find("video").getDOMNode()
 
-    it("sets the current time to startTime on mount", () => {
-      videoElement.dispatchEvent(new Event("loadedmetadata"))
+    it("sets the current time to startTime on render", () => {
+      render(<Video {...props} />)
+      const videoElement = screen.getByTestId("stVideo") as HTMLMediaElement
       expect(videoElement.currentTime).toBe(0)
     })
 
     it("updates the current time when startTime is changed", () => {
-      wrapper.setProps(getProps({ startTime: 10 }))
-      videoElement.dispatchEvent(new Event("loadedmetadata"))
+      const { rerender } = render(<Video {...props} />)
+      const videoElement = screen.getByTestId("stVideo") as HTMLMediaElement
+      expect(videoElement.currentTime).toBe(0)
+
+      rerender(<Video {...getProps({ startTime: 10 })} />)
       expect(videoElement.currentTime).toBe(10)
     })
   })

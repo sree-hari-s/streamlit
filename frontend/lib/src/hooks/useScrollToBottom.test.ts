@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,27 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+import { MockedFunction } from "vitest"
 import { renderHook } from "@testing-library/react-hooks"
+
 import { useScrollToBottom } from "./useScrollToBottom"
 import useStateRef from "./useStateRef"
 
-jest.mock("./useScrollSpy")
-jest.mock("./useScrollAnimation")
-jest.mock("./useStateRef")
+vi.mock("./useScrollSpy")
+vi.mock("./useScrollAnimation")
+vi.mock("./useStateRef")
 
 describe("useScrollToBottom", () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
   it("should initialize with proper values", () => {
-    const mockedUseStateRef = useStateRef as jest.MockedFunction<
-      typeof useStateRef
-    >
+    const mockedUseStateRef = useStateRef as MockedFunction<typeof useStateRef>
     mockedUseStateRef.mockImplementation(initialValue => [
       initialValue,
-      jest.fn(),
+      vi.fn(),
       { current: initialValue },
     ])
     const { result } = renderHook(() => useScrollToBottom())

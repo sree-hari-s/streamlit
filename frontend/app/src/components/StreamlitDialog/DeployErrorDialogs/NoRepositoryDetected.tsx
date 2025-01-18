@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
  */
 
 import React from "react"
+
 import { STREAMLIT_COMMUNITY_CLOUD_DOCS_URL } from "@streamlit/app/src/urls"
+
 import { IDeployErrorDialog } from "./types"
 import { StyledParagraph } from "./styled-components"
 

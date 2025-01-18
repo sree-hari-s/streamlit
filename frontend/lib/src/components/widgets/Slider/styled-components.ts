@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,9 +35,9 @@ export const StyledThumb = styled.div<StyledSliderProps>(
     borderLeftStyle: "none",
     boxShadow: "none",
     display: "flex",
-    height: theme.radii.xl,
     justifyContent: "center",
-    width: theme.radii.xl,
+    height: theme.sizes.sliderThumb,
+    width: theme.sizes.sliderThumb,
     ":focus": {
       outline: "none",
     },
@@ -51,22 +51,25 @@ export const StyledThumbValue = styled.div<StyledSliderProps>(
   ({ disabled, theme }) => ({
     fontFamily: theme.genericFonts.codeFont,
     fontSize: theme.fontSizes.sm,
-    paddingBottom: theme.spacing.twoThirdsSmFont,
     color: disabled ? theme.colors.gray : theme.colors.primary,
-    top: "-22px",
+    top: "-1.6em",
     position: "absolute",
     whiteSpace: "nowrap",
     backgroundColor: theme.colors.transparent,
     lineHeight: theme.lineHeights.base,
-    fontWeight: "normal",
+    fontWeight: theme.fontWeights.normal,
+    // If values are clickable, it's hard to move the right thumb when they're
+    // very close. So make them unclickable:
+    pointerEvents: "none",
   })
 )
 
 export const StyledTickBar = styled.div(({ theme }) => ({
+  fontSize: theme.fontSizes.sm,
   paddingBottom: theme.spacing.none,
   paddingLeft: theme.spacing.none,
   paddingRight: theme.spacing.none,
-  paddingTop: theme.spacing.twoThirdsSmFont,
+  paddingTop: "0.65em",
   justifyContent: "space-between",
   alignItems: "center",
   display: "flex",
@@ -75,8 +78,7 @@ export const StyledTickBar = styled.div(({ theme }) => ({
 export const StyledTickBarItem = styled.div<StyledSliderProps>(
   ({ disabled, theme }) => ({
     lineHeight: theme.lineHeights.base,
-    fontWeight: "normal",
-    fontSize: theme.fontSizes.sm,
+    fontWeight: theme.fontWeights.normal,
     fontFamily: theme.genericFonts.codeFont,
     color: disabled ? theme.colors.fadedText40 : "inherit",
   })

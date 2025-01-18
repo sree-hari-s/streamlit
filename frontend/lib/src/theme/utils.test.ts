@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,44 +14,75 @@
  * limitations under the License.
  */
 
+import { MockInstance } from "vitest"
+
 import { CustomThemeConfig } from "@streamlit/lib/src/proto"
-import { LocalStore } from "@streamlit/lib/src/util/storageUtils"
 import {
   baseTheme,
   createAutoTheme,
   darkTheme,
   lightTheme,
 } from "@streamlit/lib/src/theme/index"
-import { ThemeConfig } from "@streamlit/lib/src/theme/types"
 import { fonts } from "@streamlit/lib/src/theme/primitives/typography"
+import { ThemeConfig } from "@streamlit/lib/src/theme/types"
+import { LocalStore } from "@streamlit/lib/src/util/storageUtils"
 
+import { hasLightBackgroundColor } from "./getColors"
 import {
   AUTO_THEME_NAME,
   bgColorToBaseString,
-  CUSTOM_THEME_NAME,
   computeSpacingStyle,
   createEmotionTheme,
   createTheme,
+  CUSTOM_THEME_NAME,
   fontEnumToString,
   fontToEnum,
+  getCachedTheme,
   getDefaultTheme,
+  getHostSpecifiedTheme,
   getSystemTheme,
   isColor,
   isPresetTheme,
-  toThemeInput,
-  getCachedTheme,
   removeCachedTheme,
   setCachedTheme,
-  hasLightBackgroundColor,
+  toThemeInput,
 } from "./utils"
 
 const matchMediaFillers = {
   onchange: null,
-  addListener: jest.fn(), // deprecated
-  removeListener: jest.fn(), // deprecated
-  addEventListener: jest.fn(),
-  removeEventListener: jest.fn(),
-  dispatchEvent: jest.fn(),
+  addListener: vi.fn(), // deprecated
+  removeListener: vi.fn(), // deprecated
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  dispatchEvent: vi.fn(),
+}
+
+const windowLocationSearch = (search: string): any => ({
+  location: {
+    search,
+  },
+})
+
+const windowMatchMedia = (theme: "light" | "dark"): any => ({
+  matchMedia: (query: any) => ({
+    matches: query === `(prefers-color-scheme: ${theme})`,
+    media: query,
+    ...matchMediaFillers,
+  }),
+})
+
+const mockWindow = (...overrides: object[]): MockInstance => {
+  const localStorage = window.localStorage
+  const windowSpy = vi.spyOn(window, "window", "get")
+
+  windowSpy.mockImplementation(() => ({
+    localStorage,
+    ...windowLocationSearch(""),
+    ...windowMatchMedia("light"),
+    ...Object.assign({}, ...overrides),
+  }))
+
+  return windowSpy
 }
 
 describe("Styling utils", () => {
@@ -95,7 +126,7 @@ describe("Cached theme helpers", () => {
   // doesn't work. Accessing .__proto__ here isn't too bad of a crime since
   // it's test code.
   const breakLocalStorage = (): void => {
-    jest
+    vi
       // eslint-disable-next-line no-proto
       .spyOn(window.localStorage.__proto__, "setItem")
       .mockImplementation(() => {
@@ -104,7 +135,7 @@ describe("Cached theme helpers", () => {
   }
 
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
     window.localStorage.clear()
   })
 
@@ -113,7 +144,7 @@ describe("Cached theme helpers", () => {
       breakLocalStorage()
 
       // eslint-disable-next-line no-proto
-      const getItemSpy = jest.spyOn(window.localStorage.__proto__, "getItem")
+      const getItemSpy = vi.spyOn(window.localStorage.__proto__, "getItem")
       expect(getCachedTheme()).toBe(null)
       expect(getItemSpy).not.toHaveBeenCalled()
     })
@@ -163,7 +194,7 @@ describe("Cached theme helpers", () => {
     it("does nothing if localStorage is not available", () => {
       breakLocalStorage()
 
-      const removeItemSpy = jest.spyOn(
+      const removeItemSpy = vi.spyOn(
         // eslint-disable-next-line no-proto
         window.localStorage.__proto__,
         "removeItem"
@@ -173,7 +204,7 @@ describe("Cached theme helpers", () => {
     })
 
     it("removes theme if localStorage", () => {
-      const removeItemSpy = jest.spyOn(
+      const removeItemSpy = vi.spyOn(
         // eslint-disable-next-line no-proto
         window.localStorage.__proto__,
         "removeItem"
@@ -198,7 +229,7 @@ describe("Cached theme helpers", () => {
       breakLocalStorage()
 
       // eslint-disable-next-line no-proto
-      const setItemSpy = jest.spyOn(window.localStorage.__proto__, "setItem")
+      const setItemSpy = vi.spyOn(window.localStorage.__proto__, "setItem")
 
       setCachedTheme(darkTheme)
       // This looks a bit funny and is the way it is because the way we know
@@ -359,48 +390,97 @@ describe("createTheme", () => {
 })
 
 describe("getSystemTheme", () => {
+  let windowSpy: MockInstance
+
+  afterEach(() => {
+    windowSpy.mockRestore()
+    window.localStorage.clear()
+  })
+
   it("returns lightTheme when matchMedia does *not* match dark", () => {
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: jest.fn().mockImplementation(query => ({
-        matches: false,
-        media: query,
-        ...matchMediaFillers,
-      })),
-    })
+    windowSpy = mockWindow()
 
     expect(getSystemTheme().name).toBe("Light")
   })
 
   it("returns darkTheme when matchMedia does match dark", () => {
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: jest.fn().mockImplementation(query => ({
-        matches: true,
-        media: query,
-        ...matchMediaFillers,
-      })),
-    })
+    windowSpy = mockWindow(windowMatchMedia("dark"))
 
     expect(getSystemTheme().name).toBe("Dark")
   })
 })
 
+describe("getHostSpecifiedTheme", () => {
+  let windowSpy: MockInstance
+
+  afterEach(() => {
+    windowSpy.mockRestore()
+    window.localStorage.clear()
+  })
+
+  it("sets default to the auto theme when there is no theme preference", () => {
+    windowSpy = mockWindow()
+    const defaultTheme = getHostSpecifiedTheme()
+
+    expect(defaultTheme.name).toBe(AUTO_THEME_NAME)
+    // Also verify that the theme is our lightTheme.
+    expect(defaultTheme.emotion.colors).toEqual(lightTheme.emotion.colors)
+  })
+
+  it("sets the auto theme correctly when the OS preference is dark", () => {
+    mockWindow(windowSpy, windowMatchMedia("dark"))
+
+    const defaultTheme = getHostSpecifiedTheme()
+
+    expect(defaultTheme.name).toBe(AUTO_THEME_NAME)
+    expect(defaultTheme.emotion.colors).toEqual(darkTheme.emotion.colors)
+  })
+
+  it("sets default to the light theme when an embed query parameter is set", () => {
+    windowSpy = mockWindow(
+      windowLocationSearch("?embed=true&embed_options=light_theme")
+    )
+    const defaultTheme = getHostSpecifiedTheme()
+
+    expect(defaultTheme.name).toBe("Light")
+    // Also verify that the theme is our lightTheme.
+    expect(defaultTheme.emotion.colors).toEqual(lightTheme.emotion.colors)
+  })
+
+  it("sets default to the dark theme when an embed query parameter is set", () => {
+    windowSpy = mockWindow(
+      windowLocationSearch("?embed=true&embed_options=dark_theme")
+    )
+    const defaultTheme = getHostSpecifiedTheme()
+
+    expect(defaultTheme.name).toBe("Dark")
+    // Also verify that the theme is our darkTheme.
+    expect(defaultTheme.emotion.colors).toEqual(darkTheme.emotion.colors)
+  })
+
+  it("respects embed query parameter is set over system theme", () => {
+    windowSpy = mockWindow(
+      windowMatchMedia("dark"),
+      windowLocationSearch("?embed=true&embed_options=light_theme")
+    )
+    const defaultTheme = getHostSpecifiedTheme()
+
+    expect(defaultTheme.name).toBe("Light")
+    // Also verify that the theme is our lightTheme.
+    expect(defaultTheme.emotion.colors).toEqual(lightTheme.emotion.colors)
+  })
+})
+
 describe("getDefaultTheme", () => {
-  beforeEach(() => {
-    // sourced from:
-    // https://jestjs.io/docs/en/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: jest.fn().mockImplementation(query => ({
-        matches: false,
-        media: query,
-        ...matchMediaFillers,
-      })),
-    })
+  let windowSpy: MockInstance
+
+  afterEach(() => {
+    windowSpy.mockRestore()
+    window.localStorage.clear()
   })
 
   it("sets default to the auto theme when there is no cached theme", () => {
+    windowSpy = mockWindow()
     const defaultTheme = getDefaultTheme()
 
     expect(defaultTheme.name).toBe(AUTO_THEME_NAME)
@@ -409,16 +489,7 @@ describe("getDefaultTheme", () => {
   })
 
   it("sets the auto theme correctly when the OS preference is dark", () => {
-    // sourced from:
-    // https://jestjs.io/docs/en/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: jest.fn().mockImplementation(query => ({
-        matches: true,
-        media: query,
-        ...matchMediaFillers,
-      })),
-    })
+    mockWindow(windowSpy, windowMatchMedia("dark"))
 
     const defaultTheme = getDefaultTheme()
 
@@ -427,12 +498,47 @@ describe("getDefaultTheme", () => {
   })
 
   it("sets the default to the user preference when one is set", () => {
+    windowSpy = mockWindow()
     setCachedTheme(darkTheme)
 
     const defaultTheme = getDefaultTheme()
 
     expect(defaultTheme.name).toBe("Dark")
     expect(defaultTheme.emotion.colors).toEqual(darkTheme.emotion.colors)
+  })
+
+  it("sets default to the light theme when an embed query parameter is set", () => {
+    windowSpy = mockWindow(
+      windowLocationSearch("?embed=true&embed_options=light_theme")
+    )
+    const defaultTheme = getDefaultTheme()
+
+    expect(defaultTheme.name).toBe("Light")
+    // Also verify that the theme is our lightTheme.
+    expect(defaultTheme.emotion.colors).toEqual(lightTheme.emotion.colors)
+  })
+
+  it("sets default to the dark theme when an embed query parameter is set", () => {
+    windowSpy = mockWindow(
+      windowLocationSearch("?embed=true&embed_options=dark_theme")
+    )
+    const defaultTheme = getDefaultTheme()
+
+    expect(defaultTheme.name).toBe("Dark")
+    // Also verify that the theme is our darkTheme.
+    expect(defaultTheme.emotion.colors).toEqual(darkTheme.emotion.colors)
+  })
+
+  it("respects embed query parameter is set over system theme", () => {
+    windowSpy = mockWindow(
+      windowMatchMedia("dark"),
+      windowLocationSearch("?embed=true&embed_options=light_theme")
+    )
+    const defaultTheme = getDefaultTheme()
+
+    expect(defaultTheme.name).toBe("Light")
+    // Also verify that the theme is our lightTheme.
+    expect(defaultTheme.emotion.colors).toEqual(lightTheme.emotion.colors)
   })
 })
 
@@ -593,5 +699,46 @@ describe("hasLightBackgroundColor", () => {
     it(`${description}`, () => {
       expect(hasLightBackgroundColor(theme.emotion)).toBe(expectedResult)
     })
+  })
+})
+
+describe("theme overrides", () => {
+  beforeEach(async () => {
+    vi.resetModules()
+    window.__streamlit = undefined
+  })
+
+  afterEach(() => {
+    vi.resetModules()
+    window.__streamlit = undefined
+  })
+
+  it("honors the window variables set", async () => {
+    window.__streamlit = {
+      LIGHT_THEME: {
+        primaryColor: "purple",
+      },
+      DARK_THEME: {
+        primaryColor: "yellow",
+      },
+    }
+
+    const module = await import("./utils")
+    // Ensure we are not working with the same object
+    expect(module.getMergedLightTheme()).not.toEqual(lightTheme)
+    expect(module.getMergedDarkTheme()).not.toEqual(darkTheme)
+
+    expect(module.getMergedLightTheme().emotion.colors.primary).toEqual(
+      "purple"
+    )
+    expect(module.getMergedDarkTheme().emotion.colors.primary).toEqual(
+      "yellow"
+    )
+  })
+
+  it("maintains original theme if no global themes are specified", async () => {
+    const module = await import("./utils")
+    expect(module.getMergedLightTheme()).toEqual(lightTheme)
+    expect(module.getMergedDarkTheme()).toEqual(darkTheme)
   })
 })

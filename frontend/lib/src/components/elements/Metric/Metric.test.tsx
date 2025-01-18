@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,16 @@
  */
 
 import React from "react"
-import { mount } from "@streamlit/lib/src/test_util"
 
-import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
+import { screen } from "@testing-library/react"
 
+import { render } from "@streamlit/lib/src/test_util"
+import { mockTheme } from "@streamlit/lib/src/mocks/mockTheme"
 import {
-  Metric as MetricProto,
   LabelVisibilityMessage as LabelVisibilityMessageProto,
+  Metric as MetricProto,
 } from "@streamlit/lib/src/proto"
+
 import Metric, { MetricProps } from "./Metric"
 
 const getProps = (elementProps: Partial<MetricProto> = {}): MetricProps => ({
@@ -37,17 +39,19 @@ const getProps = (elementProps: Partial<MetricProto> = {}): MetricProps => ({
 describe("Metric element", () => {
   it("renders metric as expected", () => {
     const props = getProps()
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper).toBeDefined()
+    render(<Metric {...props} />)
+    const metricElement = screen.getByTestId("stMetric")
+    expect(metricElement).toBeInTheDocument()
+    expect(metricElement).toHaveClass("stMetric")
   })
 
   it("renders metric label as expected", () => {
     const props = getProps()
-    const wrapper = mount(<Metric {...props} />)
-    const wrappedMetricLabel = wrapper.find(StreamlitMarkdown)
+    render(<Metric {...props} />)
 
-    expect(wrappedMetricLabel.props().source).toBe(getProps().element.label)
-    expect(wrappedMetricLabel.props().isLabel).toBe(true)
+    expect(screen.getByTestId("stMetricLabel")).toHaveTextContent(
+      props.element.label
+    )
   })
 
   it("pass labelVisibility prop to StyledMetricLabelText correctly when hidden", () => {
@@ -56,9 +60,10 @@ describe("Metric element", () => {
         value: LabelVisibilityMessageProto.LabelVisibilityOptions.HIDDEN,
       },
     })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricLabelText").prop("visibility")).toEqual(
-      LabelVisibilityMessageProto.LabelVisibilityOptions.HIDDEN
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricLabel")).toHaveAttribute(
+      "visibility",
+      String(LabelVisibilityMessageProto.LabelVisibilityOptions.HIDDEN)
     )
   })
 
@@ -68,16 +73,17 @@ describe("Metric element", () => {
         value: LabelVisibilityMessageProto.LabelVisibilityOptions.COLLAPSED,
       },
     })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricLabelText").prop("visibility")).toEqual(
-      LabelVisibilityMessageProto.LabelVisibilityOptions.COLLAPSED
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricLabel")).toHaveAttribute(
+      "visibility",
+      String(LabelVisibilityMessageProto.LabelVisibilityOptions.COLLAPSED)
     )
   })
 
   it("renders direction icon based on props - red/up", () => {
     const props = getProps()
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricDeltaText").find("svg")).toBeDefined()
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricDeltaIcon-Up")).toBeInTheDocument()
   })
 
   it("renders direction icon based on props - green/down", () => {
@@ -85,8 +91,8 @@ describe("Metric element", () => {
       color: MetricProto.MetricColor.GREEN,
       direction: MetricProto.MetricDirection.DOWN,
     })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricDeltaText").find("svg")).toBeDefined()
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricDeltaIcon-Down")).toBeInTheDocument()
   })
 
   it("renders no text and icon based on props", () => {
@@ -95,8 +101,9 @@ describe("Metric element", () => {
       direction: MetricProto.MetricDirection.NONE,
       delta: "",
     })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricDeltaText").exists()).toBe(false)
+    render(<Metric {...props} />)
+    expect(screen.queryByTestId("stMetricDeltaIcon")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("stMetricDelta")).not.toBeInTheDocument()
   })
 
   it("renders correct gray based on props", () => {
@@ -104,9 +111,9 @@ describe("Metric element", () => {
       color: MetricProto.MetricColor.GRAY,
       direction: MetricProto.MetricDirection.NONE,
     })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricDeltaText").prop("style")?.color).toBe(
-      "rgba(49, 51, 63, 0.6)"
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricDelta")).toHaveStyle(
+      "color: rgba(49, 51, 63, 0.6);"
     )
   })
 
@@ -115,23 +122,40 @@ describe("Metric element", () => {
       color: MetricProto.MetricColor.GREEN,
       direction: MetricProto.MetricDirection.DOWN,
     })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricDeltaText").prop("style")?.color).toBe(
-      "#09ab3b"
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricDelta")).toHaveStyle(
+      "color: rgb(9, 171, 59);"
     )
   })
 
   it("renders correct red based on props", () => {
     const props = getProps()
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("StyledMetricDeltaText").prop("style")?.color).toBe(
-      "#ff2b2b"
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetricDelta")).toHaveStyle(
+      "color: rgb(255, 43, 43);"
     )
   })
 
   it("should render TooltipIcon if help text provided", () => {
     const props = getProps({ help: "help text" })
-    const wrapper = mount(<Metric {...props} />)
-    expect(wrapper.find("TooltipIcon").prop("content")).toBe("help text")
+    render(<Metric {...props} />)
+    const tooltip = screen.getByTestId("stTooltipIcon")
+    expect(tooltip).toBeInTheDocument()
+  })
+
+  it("renders without border by default", () => {
+    const props = getProps()
+    render(<Metric {...props} />)
+    expect(screen.getByTestId("stMetric")).toHaveStyle("border: none;")
+  })
+
+  it("renders with border if passed", () => {
+    const props = getProps({ showBorder: true })
+    render(<Metric {...props} />)
+
+    const expectedBorder = `${mockTheme.emotion.sizes.borderWidth} solid ${mockTheme.emotion.colors.borderColor}`
+    expect(screen.getByTestId("stMetric")).toHaveStyle(
+      `border: ${expectedBorder}`
+    )
   })
 })

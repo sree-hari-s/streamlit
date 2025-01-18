@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,11 +14,12 @@
  * limitations under the License.
  */
 
-import styled from "@emotion/styled"
 import { keyframes } from "@emotion/react"
 import { Keyframes } from "@emotion/serialize"
-import { EmotionTheme } from "@streamlit/lib"
+import styled from "@emotion/styled"
 import { transparentize } from "color2k"
+
+import { EmotionTheme } from "@streamlit/lib"
 
 const recordingIndicatorPulse = (theme: EmotionTheme): Keyframes => keyframes`
 0% {
@@ -37,14 +38,14 @@ export const StyledRecordingIndicator = styled.div(({ theme }) => ({
   right: theme.spacing.sm,
   width: theme.spacing.sm,
   height: theme.spacing.sm,
-  backgroundColor: "red",
+  backgroundColor: theme.colors.red,
   borderRadius: theme.radii.full,
   boxShadow: `0 0 ${theme.spacing.twoXS} ${theme.colors.red}`,
   animation: `${recordingIndicatorPulse(theme)} 2s linear infinite`,
 }))
 
 export const StyledMenuDivider = styled.div(({ theme }) => ({
-  borderTop: `1px solid ${theme.colors.fadedText10}`,
+  borderTop: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
   margin: `${theme.spacing.sm} ${theme.spacing.none}`,
 }))
 
@@ -79,14 +80,6 @@ export const StyledMenuItem = styled.ul<ItemProps>(
           cursor: "not-allowed",
         }
       : {
-          "&:active": {
-            backgroundColor: theme.colors.primary,
-            color: theme.colors.white,
-            outline: "none",
-            [StyledMenuItemShortcut as any]: {
-              color: theme.colors.white,
-            },
-          },
           "&:focus": {
             backgroundColor: theme.colors.primary,
             color: theme.colors.white,
@@ -102,6 +95,7 @@ export const StyledMenuItem = styled.ul<ItemProps>(
       display: "block",
       flexDirection: "row",
       alignItems: "flex-start",
+      padding: theme.spacing.none,
       cursor: "pointer",
       ...(recordingStyles || {}),
       ...disabledStyles,
@@ -174,7 +168,7 @@ export const StyledMenuItemLabel = styled.span(({ theme }) => ({
 export const StyledMenuContainer = styled.div(({ theme }) => ({
   // We start by adding border radius to all menus
   ul: {
-    borderRadius: theme.radii.lg,
+    borderRadius: theme.radii.default,
   },
 
   // This selects the standard menu only if there's another menu below.
@@ -192,8 +186,11 @@ export const StyledMenuContainer = styled.div(({ theme }) => ({
     boxShadow: "none",
     borderTop: "none",
   },
+  "@media print": {
+    display: "none",
+  },
 }))
 
-export const StyledMainMenuContainer = styled.span(() => ({
+export const StyledMainMenuContainer = styled.span({
   lineHeight: "initial",
-}))
+})

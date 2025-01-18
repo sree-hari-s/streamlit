@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,9 +21,13 @@ from streamlit.commands.page_config import (
     ENG_EMOJIS,
     RANDOM_EMOJIS,
     PageIcon,
-    valid_url,
+    _lower_clean_dict_keys,
 )
-from streamlit.errors import StreamlitAPIException
+from streamlit.errors import (
+    StreamlitAPIException,
+    StreamlitInvalidSidebarStateError,
+    StreamlitInvalidURLError,
+)
 from streamlit.proto.PageConfig_pb2 import PageConfig as PageConfigProto
 from streamlit.string_util import is_emoji
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
@@ -61,7 +65,7 @@ class PageConfigTest(DeltaGeneratorTestCase):
     def test_set_page_config_icon_calls_image_to_url(self, icon: PageIcon):
         """For all other page_config icon inputs, we just call image_to_url."""
         with mock.patch(
-            "streamlit.commands.page_config.image.image_to_url",
+            "streamlit.commands.page_config.image_to_url",
             return_value="https://mock.url",
         ):
             st.set_page_config(page_icon=icon)
@@ -98,12 +102,8 @@ class PageConfigTest(DeltaGeneratorTestCase):
         self.assertEqual(c.initial_sidebar_state, PageConfigProto.COLLAPSED)
 
     def test_set_page_config_sidebar_invalid(self):
-        with self.assertRaises(StreamlitAPIException) as e:
+        with self.assertRaises(StreamlitInvalidSidebarStateError):
             st.set_page_config(initial_sidebar_state="INVALID")
-        self.assertEqual(
-            str(e.exception),
-            '`initial_sidebar_state` must be "auto" or "expanded" or "collapsed" (got "INVALID")',
-        )
 
     def test_set_page_config_menu_items_about(self):
         menu_items = {" about": "*This is an about. This accepts markdown.*"}
@@ -127,10 +127,9 @@ class PageConfigTest(DeltaGeneratorTestCase):
         self.assertEqual(c.get_help_url, "https://get_help.com")
 
     def test_set_page_config_menu_items_empty_string(self):
-        with self.assertRaises(StreamlitAPIException) as e:
+        with self.assertRaises(StreamlitInvalidURLError):
             menu_items = {"report a bug": "", "GET HELP": "", "about": ""}
             st.set_page_config(menu_items=menu_items)
-        self.assertEqual(str(e.exception), '"" is a not a valid URL!')
 
     def test_set_page_config_menu_items_none(self):
         menu_items = {"report a bug": None, "GET HELP": None, "about": None}
@@ -146,8 +145,8 @@ class PageConfigTest(DeltaGeneratorTestCase):
             st.set_page_config(menu_items=menu_items)
         self.assertEqual(
             str(e.exception),
-            'We only accept the keys: "Get help", "Report a bug", and "About" '
-            '("invalid" is not a valid key.)',
+            'We only accept the keys: `"Get help"`, `"Report a bug"`, and `"About"` '
+            '(`"invalid"` is not a valid key.)',
         )
 
     def test_set_page_config_menu_items_empty_dict(self):
@@ -157,17 +156,18 @@ class PageConfigTest(DeltaGeneratorTestCase):
 
     @parameterized.expand(
         [
-            ("http://www.cwi.nl:80/%7Eguido/Python.html", True),
-            ("/data/Python.html", False),
-            (532, False),
-            ("dkakasdkjdjakdjadjfalskdjfalk", False),
-            ("https://stackoverflow.com", True),
-            ("mailto:test@example.com", True),
-            ("mailto:", False),
+            ({}, {}),
+            (
+                {
+                    "HELLO_1": 4,
+                    "Hello_2": "world",
+                    "hElLo_3": 5.5,
+                    "": "",
+                },
+                {"hello_1": 4, "hello_2": "world", "hello_3": 5.5, "": ""},
+            ),
         ]
     )
-    def test_valid_url(self, url, expected_value):
-        if expected_value:
-            self.assertTrue(valid_url(url))
-        else:
-            self.assertFalse(valid_url(url))
+    def test_lower_clean_dict_keys(self, input_dict, answer_dict):
+        return_dict = _lower_clean_dict_keys(input_dict)
+        assert return_dict == answer_dict

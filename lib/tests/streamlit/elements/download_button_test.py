@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,20 @@ class DownloadButtonTest(DeltaGeneratorTestCase):
         self.assertEqual(c.type, "secondary")
         self.assertEqual(c.disabled, False)
 
+    def test_emoji_icon(self):
+        """Test that it can be called with emoji icon."""
+        st.download_button("the label", icon="⚡", data="juststring")
+
+        c = self.get_delta_from_queue().new_element.download_button
+        self.assertEqual(c.icon, "⚡")
+
+    def test_material_icon(self):
+        """Test that it can be called with material icon."""
+        st.download_button("the label", icon=":material/thumb_up:", data="juststring")
+
+        c = self.get_delta_from_queue().new_element.download_button
+        self.assertEqual(c.icon, ":material/thumb_up:")
+
     def test_just_disabled(self):
         """Test that it can be called with disabled param."""
         st.download_button("the label", data="juststring", disabled=True)
@@ -47,12 +61,13 @@ class DownloadButtonTest(DeltaGeneratorTestCase):
         c = self.get_delta_from_queue().new_element.download_button
         self.assertTrue("/media/" in c.url)
 
-    def test_type(self):
+    @parameterized.expand(["primary", "secondary", "tertiary"])
+    def test_type(self, type):
         """Test that it can be called with type param."""
-        st.download_button("the label", data="Streamlit", type="primary")
+        st.download_button("the label", data="Streamlit", type=type)
 
         c = self.get_delta_from_queue().new_element.download_button
-        self.assertEqual(c.type, "primary")
+        self.assertEqual(c.type, type)
 
     def test_use_container_width_can_be_set_to_true(self):
         """Test use_container_width can be set to true."""
@@ -67,3 +82,12 @@ class DownloadButtonTest(DeltaGeneratorTestCase):
 
         c = self.get_delta_from_queue().new_element.download_button
         self.assertEqual(c.use_container_width, False)
+
+    def test_shows_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.download_button("the label", data="juststring"))()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)

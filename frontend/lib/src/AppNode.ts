@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,20 @@
  */
 
 import { produce } from "immer"
-import { Map as ImmutableMap } from "immutable"
+
 import {
-  Arrow as ArrowProto,
+  getLoadingScreenType,
+  isNullOrUndefined,
+  LoadingScreenType,
+  makeAppSkeletonElement,
+  makeElementWithErrorText,
+  makeElementWithInfoText,
+  notUndefined,
+} from "@streamlit/lib/src/util/utils"
+
+import {
   ArrowNamedDataSet,
+  Arrow as ArrowProto,
   ArrowVegaLiteChart as ArrowVegaLiteChartProto,
   Block as BlockProto,
   Delta,
@@ -26,23 +36,27 @@ import {
   ForwardMsgMetadata,
   IArrow,
   IArrowNamedDataSet,
-  NamedDataSet,
+  Logo,
 } from "./proto"
 import {
   VegaLiteChartElement,
   WrappedNamedDataset,
-} from "./components/elements/ArrowVegaLiteChart/ArrowVegaLiteChart"
+} from "./components/elements/ArrowVegaLiteChart"
 import { Quiver } from "./dataframes/Quiver"
-import { addRows } from "./dataframes/dataFrameProto"
 import { ensureError } from "./util/ErrorHandling"
-import { toImmutableProto } from "./util/immutableProto"
-import {
-  makeElementWithInfoText,
-  makeElementWithErrorText,
-  notUndefined,
-} from "./util/utils"
 
 const NO_SCRIPT_RUN_ID = "NO_SCRIPT_RUN_ID"
+
+interface LogoMetadata {
+  // Associated scriptHash that created the logo
+  activeScriptHash: string
+
+  // Associated scriptRunId that created the logo
+  scriptRunId: string
+}
+interface AppLogo extends LogoMetadata {
+  logo: Logo
+}
 
 /**
  * An immutable node of the "App Data Tree".
@@ -92,6 +106,23 @@ export interface AppNode {
   readonly scriptRunId: string
 
   /**
+   * The ID of the fragment that sent the Delta creating this AppNode. If this
+   * AppNode was not created by a fragment, this field is falsy.
+   */
+  readonly fragmentId?: string
+
+  /**
+   * The hash of the script that created this node.
+   */
+  readonly activeScriptHash?: string
+
+  // A timestamp indicating based on which delta message the node was created.
+  // If the node was created without a delta message, this field is undefined.
+  // This helps us to update React components based on a new backend message even though other
+  // props have not changed; this can happen for UI-only interactions such as dimissing a dialog.
+  readonly deltaMsgReceivedAt?: number
+
+  /**
    * Return the AppNode for the given index path, or undefined if the path
    * is invalid.
    */
@@ -104,10 +135,20 @@ export interface AppNode {
   setIn(path: number[], node: AppNode, scriptRunId: string): AppNode
 
   /**
+   * Recursively remove children nodes whose activeScriptHash is no longer
+   * associated with the mainScriptHash.
+   */
+  filterMainScriptElements(mainScriptHash: string): AppNode | undefined
+
+  /**
    * Recursively remove children nodes whose scriptRunId is no longer current.
    * If this node should no longer exist, return undefined.
    */
-  clearStaleNodes(currentScriptRunId: string): AppNode | undefined
+  clearStaleNodes(
+    currentScriptRunId: string,
+    fragmentIdsThisRun?: Array<string>,
+    fragmentIdOfBlock?: string
+  ): AppNode | undefined
 
   /**
    * Return a Set of all the Elements contained in the tree.
@@ -127,42 +168,28 @@ export class ElementNode implements AppNode {
 
   public readonly scriptRunId: string
 
-  /**
-   * A lazily-created immutableJS version of our element.
-   *
-   * This is temporary! `immutableElement` is currently needed for
-   * dataframe-consuming elements because our dataframe API is
-   * immutableJS-based. It'll go away when we've converted to an ArrowJS-based
-   * dataframe API.
-   *
-   * Because most elements do *not* use the Dataframe API, and therefore
-   * do not need to access `immutableElement`, it is calculated lazily.
-   */
-  private lazyImmutableElement?: ImmutableMap<string, any>
+  public readonly fragmentId?: string
 
   private lazyQuiverElement?: Quiver
 
   private lazyVegaLiteChartElement?: VegaLiteChartElement
 
+  // The hash of the script that created this element.
+  public readonly activeScriptHash: string
+
   /** Create a new ElementNode. */
   public constructor(
     element: Element,
     metadata: ForwardMsgMetadata,
-    scriptRunId: string
+    scriptRunId: string,
+    activeScriptHash: string,
+    fragmentId?: string
   ) {
     this.element = element
     this.metadata = metadata
     this.scriptRunId = scriptRunId
-  }
-
-  public get immutableElement(): ImmutableMap<string, any> {
-    if (this.lazyImmutableElement !== undefined) {
-      return this.lazyImmutableElement
-    }
-
-    const toReturn = toImmutableProto(Element, this.element)
-    this.lazyImmutableElement = toReturn
-    return toReturn
+    this.activeScriptHash = activeScriptHash
+    this.fragmentId = fragmentId
   }
 
   public get quiverElement(): Quiver {
@@ -207,6 +234,9 @@ export class ElementNode implements AppNode {
       datasets: modifiedDatasets,
       useContainerWidth: proto.useContainerWidth,
       vegaLiteTheme: proto.theme,
+      id: proto.id,
+      selectionMode: proto.selectionMode,
+      formId: proto.formId,
     }
 
     this.lazyVegaLiteChartElement = toReturn
@@ -223,28 +253,44 @@ export class ElementNode implements AppNode {
     throw new Error("'setIn' cannot be called on an ElementNode")
   }
 
-  public clearStaleNodes(currentScriptRunId: string): ElementNode | undefined {
+  public filterMainScriptElements(
+    mainScriptHash: string
+  ): AppNode | undefined {
+    if (this.activeScriptHash !== mainScriptHash) {
+      return undefined
+    }
+
+    return this
+  }
+
+  public clearStaleNodes(
+    currentScriptRunId: string,
+    fragmentIdsThisRun?: Array<string>,
+    fragmentIdOfBlock?: string
+  ): ElementNode | undefined {
+    if (fragmentIdsThisRun && fragmentIdsThisRun.length) {
+      // If we're currently running a fragment, nodes unrelated to the fragment
+      // shouldn't be cleared. This can happen when,
+      //   1. This element doesn't correspond to a fragment at all.
+      //   2. This element is a fragment but is in no path that was modified.
+      //   3. This element belongs to a path that was modified, but it was modified in the same run.
+      if (
+        !this.fragmentId ||
+        !fragmentIdOfBlock ||
+        this.scriptRunId === currentScriptRunId
+      ) {
+        return this
+      }
+    }
     return this.scriptRunId === currentScriptRunId ? this : undefined
   }
 
   public getElements(elements?: Set<Element>): Set<Element> {
-    if (elements == null) {
+    if (isNullOrUndefined(elements)) {
       elements = new Set<Element>()
     }
     elements.add(this.element)
     return elements
-  }
-
-  public addRows(
-    namedDataSet: NamedDataSet,
-    scriptRunId: string
-  ): ElementNode {
-    const newNode = new ElementNode(this.element, this.metadata, scriptRunId)
-    newNode.lazyImmutableElement = addRows(
-      this.immutableElement,
-      toImmutableProto(NamedDataSet, namedDataSet)
-    )
-    return newNode
   }
 
   public arrowAddRows(
@@ -252,7 +298,13 @@ export class ElementNode implements AppNode {
     scriptRunId: string
   ): ElementNode {
     const elementType = this.element.type
-    const newNode = new ElementNode(this.element, this.metadata, scriptRunId)
+    const newNode = new ElementNode(
+      this.element,
+      this.metadata,
+      scriptRunId,
+      this.activeScriptHash,
+      this.fragmentId
+    )
 
     switch (elementType) {
       case "arrowTable":
@@ -344,14 +396,27 @@ export class BlockNode implements AppNode {
 
   public readonly scriptRunId: string
 
+  public readonly fragmentId?: string
+
+  public readonly deltaMsgReceivedAt?: number
+
+  // The hash of the script that created this block.
+  public readonly activeScriptHash: string
+
   public constructor(
+    activeScriptHash: string,
     children?: AppNode[],
     deltaBlock?: BlockProto,
-    scriptRunId?: string
+    scriptRunId?: string,
+    fragmentId?: string,
+    deltaMsgReceivedAt?: number
   ) {
+    this.activeScriptHash = activeScriptHash
     this.children = children ?? []
     this.deltaBlock = deltaBlock ?? new BlockProto({})
     this.scriptRunId = scriptRunId ?? NO_SCRIPT_RUN_ID
+    this.fragmentId = fragmentId
+    this.deltaMsgReceivedAt = deltaMsgReceivedAt
   }
 
   /** True if this Block has no children. */
@@ -401,30 +466,90 @@ export class BlockNode implements AppNode {
       )
     }
 
-    return new BlockNode(newChildren, this.deltaBlock, scriptRunId)
+    return new BlockNode(
+      this.activeScriptHash,
+      newChildren,
+      this.deltaBlock,
+      scriptRunId,
+      this.fragmentId,
+      this.deltaMsgReceivedAt
+    )
   }
 
-  public clearStaleNodes(currentScriptRunId: string): BlockNode | undefined {
-    if (this.scriptRunId !== currentScriptRunId) {
+  filterMainScriptElements(mainScriptHash: string): AppNode | undefined {
+    if (this.activeScriptHash !== mainScriptHash) {
       return undefined
     }
 
     // Recursively clear our children.
     const newChildren = this.children
-      .map(child => child.clearStaleNodes(currentScriptRunId))
+      .map(child => child.filterMainScriptElements(mainScriptHash))
       .filter(notUndefined)
 
-    // If we have no children and our `allowEmpty` flag is not set, prune
-    // ourselves!
-    if (newChildren.length === 0 && !this.deltaBlock.allowEmpty) {
-      return undefined
+    return new BlockNode(
+      this.activeScriptHash,
+      newChildren,
+      this.deltaBlock,
+      this.scriptRunId,
+      this.fragmentId,
+      this.deltaMsgReceivedAt
+    )
+  }
+
+  public clearStaleNodes(
+    currentScriptRunId: string,
+    fragmentIdsThisRun?: Array<string>,
+    fragmentIdOfBlock?: string
+  ): BlockNode | undefined {
+    if (!fragmentIdsThisRun || !fragmentIdsThisRun.length) {
+      // If we're not currently running a fragment, then we can remove any blocks
+      // that don't correspond to currentScriptRunId.
+      if (this.scriptRunId !== currentScriptRunId) {
+        return undefined
+      }
+    } else {
+      // Otherwise, we are currently running a fragment, and our behavior
+      // depends on the fragmentId of this BlockNode.
+
+      // The parent block was modified but this element wasn't, so it's stale.
+      if (fragmentIdOfBlock && this.scriptRunId !== currentScriptRunId) {
+        return undefined
+      }
+
+      // This block is modified by the current run, so we indicate this to our children in case
+      // they were not modified by the current run, which means they are stale.
+      if (
+        this.fragmentId &&
+        fragmentIdsThisRun.includes(this.fragmentId) &&
+        this.scriptRunId === currentScriptRunId
+      ) {
+        fragmentIdOfBlock = this.fragmentId
+      }
     }
 
-    return new BlockNode(newChildren, this.deltaBlock, currentScriptRunId)
+    // Recursively clear our children.
+    const newChildren = this.children
+      .map(child => {
+        return child.clearStaleNodes(
+          currentScriptRunId,
+          fragmentIdsThisRun,
+          fragmentIdOfBlock
+        )
+      })
+      .filter(notUndefined)
+
+    return new BlockNode(
+      this.activeScriptHash,
+      newChildren,
+      this.deltaBlock,
+      currentScriptRunId,
+      this.fragmentId,
+      this.deltaMsgReceivedAt
+    )
   }
 
   public getElements(elementSet?: Set<Element>): Set<Element> {
-    if (elementSet == null) {
+    if (isNullOrUndefined(elementSet)) {
       elementSet = new Set<Element>()
     }
 
@@ -440,62 +565,124 @@ export class BlockNode implements AppNode {
  * The root of our data tree. It contains the app's top-level BlockNodes.
  */
 export class AppRoot {
-  private readonly root: BlockNode
+  readonly root: BlockNode
+
+  /* The hash of the main script that creates this AppRoot. */
+  readonly mainScriptHash: string
+
+  readonly appLogo: AppLogo | null
 
   /**
-   * Create an empty AppRoot with an optional placeholder element.
+   * Create an empty AppRoot with a placeholder "skeleton" element.
    */
-  public static empty(placeholderText?: string): AppRoot {
-    let mainNodes: AppNode[]
-    if (placeholderText != null) {
-      const waitNode = new ElementNode(
-        makeElementWithInfoText(placeholderText),
-        ForwardMsgMetadata.create({}),
-        NO_SCRIPT_RUN_ID
+  public static empty(
+    mainScriptHash = "",
+    isInitialRender = true,
+    sidebarElements?: BlockNode | undefined,
+    logo?: Logo | null
+  ): AppRoot {
+    const mainNodes: AppNode[] = []
+
+    let waitElement: Element | undefined
+
+    switch (getLoadingScreenType()) {
+      case LoadingScreenType.NONE:
+        break
+
+      case LoadingScreenType.V1:
+        // Only show the v1 loading state when it's the initial render.
+        // This is how v1 used to work, and we don't want any backward
+        // incompatibility.
+        if (isInitialRender) {
+          waitElement = makeElementWithInfoText("Please wait...")
+        }
+        break
+
+      default:
+        waitElement = makeAppSkeletonElement()
+    }
+
+    if (waitElement) {
+      mainNodes.push(
+        new ElementNode(
+          waitElement,
+          ForwardMsgMetadata.create({}),
+          NO_SCRIPT_RUN_ID,
+          mainScriptHash
+        )
       )
-      mainNodes = [waitNode]
-    } else {
-      mainNodes = []
     }
 
     const main = new BlockNode(
+      mainScriptHash,
       mainNodes,
       new BlockProto({ allowEmpty: true }),
       NO_SCRIPT_RUN_ID
     )
 
-    const sidebar = new BlockNode(
-      [],
-      new BlockProto({ allowEmpty: true }),
-      NO_SCRIPT_RUN_ID
-    )
+    const sidebar =
+      sidebarElements ||
+      new BlockNode(
+        mainScriptHash,
+        [],
+        new BlockProto({ allowEmpty: true }),
+        NO_SCRIPT_RUN_ID
+      )
 
     const event = new BlockNode(
+      mainScriptHash,
       [],
       new BlockProto({ allowEmpty: true }),
       NO_SCRIPT_RUN_ID
     )
 
-    return new AppRoot(new BlockNode([main, sidebar, event]))
+    const bottom = new BlockNode(
+      mainScriptHash,
+      [],
+      new BlockProto({ allowEmpty: true }),
+      NO_SCRIPT_RUN_ID
+    )
+
+    // Persist logo between pages to avoid flicker (MPA V1 - Issue #8815)
+    const appLogo = logo
+      ? {
+          logo,
+          activeScriptHash: mainScriptHash,
+          scriptRunId: NO_SCRIPT_RUN_ID,
+        }
+      : null
+
+    return new AppRoot(
+      mainScriptHash,
+      new BlockNode(mainScriptHash, [main, sidebar, event, bottom]),
+      appLogo
+    )
   }
 
-  public constructor(root: BlockNode) {
+  public constructor(
+    mainScriptHash: string,
+    root: BlockNode,
+    appLogo: AppLogo | null = null
+  ) {
+    this.mainScriptHash = mainScriptHash
     this.root = root
+    this.appLogo = appLogo
 
-    // Verify that our root node has exactly 3 children: a 'main' block,
-    // a 'sidebar' block, and an 'event' block.
+    // Verify that our root node has exactly 4 children: a 'main' block,
+    // a 'sidebar' block, a `bottom` block and an 'event' block.
     if (
-      this.root.children.length !== 3 ||
-      this.main == null ||
-      this.sidebar == null ||
-      this.event == null
+      this.root.children.length !== 4 ||
+      isNullOrUndefined(this.main) ||
+      isNullOrUndefined(this.sidebar) ||
+      isNullOrUndefined(this.event) ||
+      isNullOrUndefined(this.bottom)
     ) {
       throw new Error(`Invalid root node children! ${root}`)
     }
   }
 
   public get main(): BlockNode {
-    const [main, ,] = this.root.children
+    const [main] = this.root.children
     return main as BlockNode
   }
 
@@ -509,6 +696,22 @@ export class AppRoot {
     return event as BlockNode
   }
 
+  public get bottom(): BlockNode {
+    const [, , , bottom] = this.root.children
+    return bottom as BlockNode
+  }
+
+  public get logo(): Logo | null {
+    return this.appLogo?.logo ?? null
+  }
+
+  public appRootWithLogo(logo: Logo, metadata: LogoMetadata): AppRoot {
+    return new AppRoot(this.mainScriptHash, this.root, {
+      logo,
+      ...metadata,
+    })
+  }
+
   public applyDelta(
     scriptRunId: string,
     delta: Delta,
@@ -516,27 +719,29 @@ export class AppRoot {
   ): AppRoot {
     // The full path to the AppNode within the element tree.
     // Used to find and update the element node specified by this Delta.
-    const { deltaPath } = metadata
-
+    const { deltaPath, activeScriptHash } = metadata
     switch (delta.type) {
       case "newElement": {
         const element = delta.newElement as Element
-        return this.addElement(deltaPath, scriptRunId, element, metadata)
-      }
-
-      case "addBlock": {
-        return this.addBlock(
+        return this.addElement(
           deltaPath,
-          delta.addBlock as BlockProto,
-          scriptRunId
+          scriptRunId,
+          element,
+          metadata,
+          activeScriptHash,
+          delta.fragmentId
         )
       }
 
-      case "addRows": {
-        return this.addRows(
+      case "addBlock": {
+        const deltaMsgReceivedAt = Date.now()
+        return this.addBlock(
           deltaPath,
-          delta.addRows as NamedDataSet,
-          scriptRunId
+          delta.addBlock as BlockProto,
+          scriptRunId,
+          activeScriptHash,
+          delta.fragmentId,
+          deltaMsgReceivedAt
         )
       }
 
@@ -555,7 +760,8 @@ export class AppRoot {
             deltaPath,
             scriptRunId,
             errorElement,
-            metadata
+            metadata,
+            activeScriptHash
           )
         }
       }
@@ -566,20 +772,66 @@ export class AppRoot {
     }
   }
 
-  public clearStaleNodes(currentScriptRunId: string): AppRoot {
+  filterMainScriptElements(mainScriptHash: string): AppRoot {
+    // clears all nodes that are not associated with the mainScriptHash
+    // Get the current script run id from one of the children
+    const currentScriptRunId = this.main.scriptRunId
     const main =
-      this.main.clearStaleNodes(currentScriptRunId) || new BlockNode()
+      this.main.filterMainScriptElements(mainScriptHash) ||
+      new BlockNode(mainScriptHash)
     const sidebar =
-      this.sidebar.clearStaleNodes(currentScriptRunId) || new BlockNode()
+      this.sidebar.filterMainScriptElements(mainScriptHash) ||
+      new BlockNode(mainScriptHash)
     const event =
-      this.event.clearStaleNodes(currentScriptRunId) || new BlockNode()
+      this.event.filterMainScriptElements(mainScriptHash) ||
+      new BlockNode(mainScriptHash)
+    const bottom =
+      this.bottom.filterMainScriptElements(mainScriptHash) ||
+      new BlockNode(mainScriptHash)
+    const appLogo =
+      this.appLogo?.activeScriptHash === mainScriptHash ? this.appLogo : null
 
     return new AppRoot(
+      mainScriptHash,
       new BlockNode(
-        [main, sidebar, event],
+        mainScriptHash,
+        [main, sidebar, event, bottom],
         new BlockProto({ allowEmpty: true }),
         currentScriptRunId
-      )
+      ),
+      appLogo
+    )
+  }
+
+  public clearStaleNodes(
+    currentScriptRunId: string,
+    fragmentIdsThisRun?: Array<string>
+  ): AppRoot {
+    const main =
+      this.main.clearStaleNodes(currentScriptRunId, fragmentIdsThisRun) ||
+      new BlockNode(this.mainScriptHash)
+    const sidebar =
+      this.sidebar.clearStaleNodes(currentScriptRunId, fragmentIdsThisRun) ||
+      new BlockNode(this.mainScriptHash)
+    const event =
+      this.event.clearStaleNodes(currentScriptRunId, fragmentIdsThisRun) ||
+      new BlockNode(this.mainScriptHash)
+    const bottom =
+      this.bottom.clearStaleNodes(currentScriptRunId, fragmentIdsThisRun) ||
+      new BlockNode(this.mainScriptHash)
+
+    const appLogo =
+      this.appLogo?.scriptRunId === currentScriptRunId ? this.appLogo : null
+
+    return new AppRoot(
+      this.mainScriptHash,
+      new BlockNode(
+        this.mainScriptHash,
+        [main, sidebar, event, bottom],
+        new BlockProto({ allowEmpty: true }),
+        currentScriptRunId
+      ),
+      appLogo
     )
   }
 
@@ -589,6 +841,7 @@ export class AppRoot {
     this.main.getElements(elements)
     this.sidebar.getElements(elements)
     this.event.getElements(elements)
+    this.bottom.getElements(elements)
     return elements
   }
 
@@ -596,41 +849,59 @@ export class AppRoot {
     deltaPath: number[],
     scriptRunId: string,
     element: Element,
-    metadata: ForwardMsgMetadata
+    metadata: ForwardMsgMetadata,
+    activeScriptHash: string,
+    fragmentId?: string
   ): AppRoot {
-    const elementNode = new ElementNode(element, metadata, scriptRunId)
-    return new AppRoot(this.root.setIn(deltaPath, elementNode, scriptRunId))
+    const elementNode = new ElementNode(
+      element,
+      metadata,
+      scriptRunId,
+      activeScriptHash,
+      fragmentId
+    )
+    return new AppRoot(
+      this.mainScriptHash,
+      this.root.setIn(deltaPath, elementNode, scriptRunId),
+      this.appLogo
+    )
   }
 
   private addBlock(
     deltaPath: number[],
     block: BlockProto,
-    scriptRunId: string
+    scriptRunId: string,
+    activeScriptHash: string,
+    fragmentId?: string,
+    deltaMsgReceivedAt?: number
   ): AppRoot {
     const existingNode = this.root.getIn(deltaPath)
 
-    // If we're replacing an existing Block, this new Block inherits
-    // the existing Block's children. This prevents existing widgets from
-    // having their values reset.
-    const children: AppNode[] =
-      existingNode instanceof BlockNode ? existingNode.children : []
-
-    const blockNode = new BlockNode(children, block, scriptRunId)
-    return new AppRoot(this.root.setIn(deltaPath, blockNode, scriptRunId))
-  }
-
-  private addRows(
-    deltaPath: number[],
-    namedDataSet: NamedDataSet,
-    scriptRunId: string
-  ): AppRoot {
-    const existingNode = this.root.getIn(deltaPath) as ElementNode
-    if (existingNode == null) {
-      throw new Error(`Can't addRows: invalid deltaPath: ${deltaPath}`)
+    // If we're replacing an existing Block of the same type, this new Block
+    // inherits the existing Block's children. This preserves two things:
+    //  1. Widget State
+    //  2. React state of all elements
+    let children: AppNode[] = []
+    if (
+      existingNode instanceof BlockNode &&
+      existingNode.deltaBlock.type === block.type
+    ) {
+      children = existingNode.children
     }
 
-    const elementNode = existingNode.addRows(namedDataSet, scriptRunId)
-    return new AppRoot(this.root.setIn(deltaPath, elementNode, scriptRunId))
+    const blockNode = new BlockNode(
+      activeScriptHash,
+      children,
+      block,
+      scriptRunId,
+      fragmentId,
+      deltaMsgReceivedAt
+    )
+    return new AppRoot(
+      this.mainScriptHash,
+      this.root.setIn(deltaPath, blockNode, scriptRunId),
+      this.appLogo
+    )
   }
 
   private arrowAddRows(
@@ -639,12 +910,16 @@ export class AppRoot {
     scriptRunId: string
   ): AppRoot {
     const existingNode = this.root.getIn(deltaPath) as ElementNode
-    if (existingNode == null) {
+    if (isNullOrUndefined(existingNode)) {
       throw new Error(`Can't arrowAddRows: invalid deltaPath: ${deltaPath}`)
     }
 
     const elementNode = existingNode.arrowAddRows(namedDataSet, scriptRunId)
-    return new AppRoot(this.root.setIn(deltaPath, elementNode, scriptRunId))
+    return new AppRoot(
+      this.mainScriptHash,
+      this.root.setIn(deltaPath, elementNode, scriptRunId),
+      this.appLogo
+    )
   }
 }
 

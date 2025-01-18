@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,14 @@
  */
 
 import React, { ReactElement } from "react"
+
 import {
-  BaseLinkButtonProps as BaseLinkButtonPropsT,
   BaseButtonKind,
   BaseButtonSize,
+  BaseLinkButtonProps as BaseLinkButtonPropsT,
   StyledPrimaryLinkButton,
   StyledSecondaryLinkButton,
+  StyledTertiaryLinkButton,
 } from "./styled-components"
 
 // We define separate BaseLinkButton, and not use BaseButton for st.link_button,
@@ -36,11 +38,13 @@ function BaseLinkButton({
   rel,
   target,
   onClick,
-}: BaseLinkButtonPropsT): ReactElement {
+}: Readonly<BaseLinkButtonPropsT>): ReactElement {
   let ComponentType = StyledPrimaryLinkButton
 
   if (kind === BaseButtonKind.SECONDARY) {
     ComponentType = StyledSecondaryLinkButton
+  } else if (kind === BaseButtonKind.TERTIARY) {
+    ComponentType = StyledTertiaryLinkButton
   }
 
   return (
@@ -50,12 +54,12 @@ function BaseLinkButton({
       fluidWidth={fluidWidth || false}
       disabled={disabled || false}
       autoFocus={autoFocus || false}
-      data-testid={`baseLinkButton-${kind}`}
       href={href}
       target={target}
       rel={rel}
       onClick={onClick}
       tabIndex={disabled ? -1 : 0}
+      data-testid={`stBaseLinkButton-${kind}`}
     >
       {children}
     </ComponentType>

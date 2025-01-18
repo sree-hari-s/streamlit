@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
  */
 
 import React from "react"
+
 import { BaseProvider, LightTheme } from "baseui"
-import "@testing-library/jest-dom"
 import { screen } from "@testing-library/react"
+
 import { render } from "@streamlit/lib/src/test_util"
 
-import Modal from "./Modal"
+import Modal, { calculateModalSize } from "./Modal"
 
 describe("Modal component", () => {
   it("renders without crashing", () => {
@@ -30,7 +31,22 @@ describe("Modal component", () => {
       </BaseProvider>
     )
 
-    const modalElement = screen.getByRole("dialog")
+    const modalElement = screen.getByTestId("stDialog")
     expect(modalElement).toBeInTheDocument()
+    expect(modalElement).toHaveClass("stDialog")
+  })
+})
+describe("calculateModalSize", () => {
+  it("returns the default size when no size is provided", () => {
+    const size = calculateModalSize(undefined)
+    expect(size).toBe("default")
+  })
+  it("returns the auto size when passed size is 'auto'", () => {
+    const size = calculateModalSize("auto")
+    expect(size).toBe("auto")
+  })
+  it("calculated the size based on the spacaing and content width when size is 'full'", () => {
+    const size = calculateModalSize("full", "100px", "100px")
+    expect(size).toBe("calc(100px + 100px)")
   })
 })

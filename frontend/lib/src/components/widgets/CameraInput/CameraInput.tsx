@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
+import React from "react"
+
 import { X } from "@emotion-icons/open-iconic"
 import axios from "axios"
-import _ from "lodash"
-import React from "react"
+import isEqual from "lodash/isEqual"
 
 import {
   CameraInput as CameraInputProto,
@@ -37,21 +38,25 @@ import { FormClearHelper } from "@streamlit/lib/src/components/widgets/Form"
 import { FileUploadClient } from "@streamlit/lib/src/FileUploadClient"
 import { logError } from "@streamlit/lib/src/util/log"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
-import { labelVisibilityProtoValueToEnum } from "@streamlit/lib/src/util/utils"
+import {
+  isNullOrUndefined,
+  labelVisibilityProtoValueToEnum,
+} from "@streamlit/lib/src/util/utils"
 import {
   UploadedStatus,
   UploadFileInfo,
   UploadingStatus,
 } from "@streamlit/lib/src/components/widgets/FileUploader/UploadFileInfo"
+
 import CameraInputButton from "./CameraInputButton"
 import { FacingMode } from "./SwitchFacingModeButton"
 import {
   StyledBox,
   StyledCameraInput,
-  StyledSpan,
   StyledImg,
+  StyledSpan,
 } from "./styled-components"
-import WebcamComponent from "./WebcamComponent"
+import WebcamComponent, { WebcamPermission } from "./WebcamComponent"
 
 export interface Props {
   element: CameraInputProto
@@ -59,6 +64,9 @@ export interface Props {
   uploadClient: FileUploadClient
   disabled: boolean
   width: number
+  fragmentId?: string
+  // Allow for unit testing
+  testOverride?: WebcamPermission
 }
 
 type FileUploaderStatus =
@@ -198,12 +206,12 @@ class CameraInput extends React.PureComponent<Props, State> {
 
     const widgetValue = widgetMgr.getFileUploaderStateValue(element)
 
-    if (widgetValue == null) {
+    if (isNullOrUndefined(widgetValue)) {
       return emptyState
     }
 
     const { uploadedFileInfo } = widgetValue
-    if (uploadedFileInfo == null || uploadedFileInfo.length === 0) {
+    if (isNullOrUndefined(uploadedFileInfo) || uploadedFileInfo.length === 0) {
       return emptyState
     }
 
@@ -261,22 +269,45 @@ class CameraInput extends React.PureComponent<Props, State> {
     // If we have had no completed uploads, our widgetValue will be
     // undefined, and we can early-out of the state update.
     const newWidgetValue = this.createWidgetValue()
-    if (newWidgetValue === undefined) {
-      return
-    }
 
-    const { element, widgetMgr } = this.props
+    const { element, widgetMgr, fragmentId } = this.props
 
     // Maybe send a widgetValue update to the widgetStateManager.
     const prevWidgetValue = widgetMgr.getFileUploaderStateValue(element)
-    if (!_.isEqual(newWidgetValue, prevWidgetValue)) {
-      widgetMgr.setFileUploaderStateValue(element, newWidgetValue, {
-        fromUi: true,
-      })
+    if (!isEqual(newWidgetValue, prevWidgetValue)) {
+      widgetMgr.setFileUploaderStateValue(
+        element,
+        newWidgetValue,
+        {
+          fromUi: true,
+        },
+        fragmentId
+      )
     }
   }
 
-  private createWidgetValue(): FileUploaderStateProto | undefined {
+  public componentDidMount(): void {
+    const newWidgetValue = this.createWidgetValue()
+    const { element, widgetMgr, fragmentId } = this.props
+
+    // Set the state value on mount, to avoid triggering an extra rerun after
+    // the first rerun.
+    // We use same primitives as in file uploader widget,
+    // since simanticly camera_input is just a special case of file uploader.
+    const prevWidgetValue = widgetMgr.getFileUploaderStateValue(element)
+    if (prevWidgetValue === undefined) {
+      widgetMgr.setFileUploaderStateValue(
+        element,
+        newWidgetValue,
+        {
+          fromUi: false,
+        },
+        fragmentId
+      )
+    }
+  }
+
+  private createWidgetValue(): FileUploaderStateProto {
     const uploadedFileInfo: UploadedFileInfoProto[] = this.state.files
       .filter(f => f.status.type === "uploaded")
       .map(f => {
@@ -299,7 +330,7 @@ class CameraInput extends React.PureComponent<Props, State> {
   private onFormCleared = (): void => {
     this.setState({ files: [] }, () => {
       const newWidgetValue = this.createWidgetValue()
-      if (newWidgetValue == null) {
+      if (isNullOrUndefined(newWidgetValue)) {
         return
       }
 
@@ -307,10 +338,12 @@ class CameraInput extends React.PureComponent<Props, State> {
         imgSrc: null,
       })
 
-      this.props.widgetMgr.setFileUploaderStateValue(
-        this.props.element,
+      const { widgetMgr, element, fragmentId } = this.props
+      widgetMgr.setFileUploaderStateValue(
+        element,
         newWidgetValue,
-        { fromUi: true }
+        { fromUi: true },
+        fragmentId
       )
     })
   }
@@ -326,11 +359,7 @@ class CameraInput extends React.PureComponent<Props, State> {
     )
 
     return (
-      <StyledCameraInput
-        width={width}
-        className="row-widget"
-        data-testid="stCameraInput"
-      >
+      <StyledCameraInput className="stCameraInput" data-testid="stCameraInput">
         <WidgetLabel
           label={element.label}
           disabled={disabled}
@@ -387,6 +416,7 @@ class CameraInput extends React.PureComponent<Props, State> {
             setClearPhotoInProgress={this.setClearPhotoInProgress}
             facingMode={this.state.facingMode}
             setFacingMode={this.setFacingMode}
+            testOverride={this.props.testOverride}
           />
         )}
       </StyledCameraInput>
@@ -406,7 +436,7 @@ class CameraInput extends React.PureComponent<Props, State> {
    */
   public deleteFile = (fileId: number): void => {
     const file = this.getFile(fileId)
-    if (file == null) {
+    if (isNullOrUndefined(file)) {
       return
     }
 
@@ -466,7 +496,7 @@ class CameraInput extends React.PureComponent<Props, State> {
     }))
 
     const curFile = this.getFile(localFileId)
-    if (curFile == null || curFile.status.type !== "uploading") {
+    if (isNullOrUndefined(curFile) || curFile.status.type !== "uploading") {
       // The file may have been canceled right before the upload
       // completed. In this case, we just bail.
       return
@@ -488,7 +518,7 @@ class CameraInput extends React.PureComponent<Props, State> {
    */
   private onUploadProgress = (event: ProgressEvent, fileId: number): void => {
     const file = this.getFile(fileId)
-    if (file == null || file.status.type !== "uploading") {
+    if (isNullOrUndefined(file) || file.status.type !== "uploading") {
       return
     }
 

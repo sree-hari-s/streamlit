@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,12 @@
  */
 
 import React, { ReactElement } from "react"
-import { shallow, mount } from "@streamlit/lib/src/test_util"
+
+import { screen } from "@testing-library/react"
+
+import { render } from "@streamlit/lib/src/test_util"
+import * as Utils from "@streamlit/lib/src/theme/utils"
+import { mockConvertRemToPx } from "@streamlit/lib/src/mocks/mocks"
 
 import VirtualDropdown from "./VirtualDropdown"
 
@@ -28,29 +33,46 @@ function Option(props: OptionProps): ReactElement {
 }
 
 describe("VirtualDropdown element", () => {
-  it("renders a StyledEmptyState when it has no children", () => {
-    const wrapper = shallow(<VirtualDropdown />)
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
 
-    expect(wrapper.find("StyledEmptyState").exists()).toBeTruthy()
+  beforeEach(() => {
+    vi.spyOn(Utils, "convertRemToPx").mockImplementation(mockConvertRemToPx)
+  })
+
+  it("renders a StyledEmptyState when it has no children", () => {
+    render(<VirtualDropdown />)
+
+    expect(
+      screen.getByTestId("stSelectboxVirtualDropdownEmpty")
+    ).toBeInTheDocument()
   })
 
   it("renders a StyledEmptyState when it has children with no item", () => {
-    const wrapper = shallow(
+    render(
       <VirtualDropdown>
         <Option />
       </VirtualDropdown>
     )
 
-    expect(wrapper.find("StyledEmptyState").exists()).toBeTruthy()
+    expect(
+      screen.getByTestId("stSelectboxVirtualDropdownEmpty")
+    ).toBeInTheDocument()
   })
 
   it("renders a FixedSizeList when it has children", () => {
-    const wrapper = mount(
+    render(
       <VirtualDropdown>
         <Option item={{ value: "abc" }} />
       </VirtualDropdown>
     )
 
-    expect(wrapper.find("FixedSizeListItem").exists()).toBeTruthy()
+    expect(
+      screen.getByTestId("stSelectboxVirtualDropdown")
+    ).toBeInTheDocument()
+
+    // each option will have a tooltip attached to it
+    expect(screen.getAllByTestId("stTooltipHoverTarget")).toHaveLength(1)
   })
 })

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-import { render } from "@streamlit/lib/src/test_util"
 import React from "react"
+
+import { render } from "@streamlit/lib/src/test_util"
+
 import StreamlitSyntaxHighlighter, {
   StreamlitSyntaxHighlighterProps,
 } from "./StreamlitSyntaxHighlighter"
@@ -70,5 +72,12 @@ describe("CustomCodeTag Element", () => {
     expect(
       baseElement.querySelector("pre code .token.string")?.innerHTML
     ).toBe('"Hello"')
+  })
+
+  it("applies height style when height prop is provided", () => {
+    const props = getStreamlitSyntaxHighlighterProps({ height: 200 })
+    const { baseElement } = render(<StreamlitSyntaxHighlighter {...props} />)
+
+    expect(baseElement.querySelector("pre")).toHaveStyle({ height: "200px" })
   })
 })

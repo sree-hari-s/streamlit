@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,16 @@
  */
 
 import axios, { AxiosRequestConfig, AxiosResponse, CancelToken } from "axios"
+
 import {
   BaseUriParts,
   buildHttpUri,
-  StreamlitEndpoints,
+  FileUploadClientConfig,
   getCookie,
   IAppPage,
+  makePath,
+  notNullOrUndefined,
+  StreamlitEndpoints,
 } from "@streamlit/lib"
 
 interface Props {
@@ -41,6 +45,8 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
 
   private cachedServerUri?: BaseUriParts
 
+  private fileUploadClientConfig?: FileUploadClientConfig
+
   public constructor(props: Props) {
     this.getServerUri = props.getServerUri
     this.csrfEnabled = props.csrfEnabled
@@ -51,6 +57,16 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
       this.requireServerUri(),
       `${COMPONENT_ENDPOINT_BASE}/${componentName}/${path}`
     )
+  }
+
+  public setFileUploadClientConfig({
+    prefix,
+    headers,
+  }: FileUploadClientConfig): void {
+    this.fileUploadClientConfig = {
+      prefix,
+      headers,
+    }
   }
 
   /**
@@ -65,13 +81,19 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
   }
 
   /**
-   * Construct a URL for uploading a file. If the URL is relative and starts
-   * with "/_stcore/upload_file", assume we're uploading the file to the
-   * Streamlit Tornado server and construct the URL appropriately. Otherwise,
-   * we're probably uploading the file to some external service, so we leave
-   * the URL alone.
+   * Construct a URL for uploading a file. If the `fileUploadClientConfig`
+   * exists, we build URL by prefixing URL with prefix from the config,
+   * otherwise if the `fileUploadClientConfig` is not present, if URL is
+   * relative and starts with "/_stcore/upload_file", assume we're uploading
+   * the file to the Streamlit Tornado server and construct the URL
+   * appropriately. Otherwise, we're probably uploading the file to some
+   * external service, so we leave the URL alone.
    */
   public buildFileUploadURL(url: string): string {
+    if (this.fileUploadClientConfig) {
+      return makePath(this.fileUploadClientConfig.prefix, url)
+    }
+
     return url.startsWith(UPLOAD_FILE_ENDPOINT)
       ? buildHttpUri(this.requireServerUri(), url)
       : url
@@ -80,13 +102,12 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
   /** Construct a URL for an app page in a multi-page app. */
   public buildAppPageURL(
     pageLinkBaseURL: string | undefined,
-    page: IAppPage,
-    pageIndex: number
+    page: IAppPage
   ): string {
-    const pageName = page.pageName as string
-    const navigateTo = pageIndex === 0 ? "" : pageName
+    const urlPath = page.urlPathname as string
+    const navigateTo = page.isDefault ? "" : urlPath
 
-    if (pageLinkBaseURL != null && pageLinkBaseURL.length > 0) {
+    if (notNullOrUndefined(pageLinkBaseURL) && pageLinkBaseURL.length > 0) {
       return `${pageLinkBaseURL}/${navigateTo}`
     }
 
@@ -110,16 +131,30 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
     cancelToken?: CancelToken
   ): Promise<void> {
     const form = new FormData()
-    form.append("sessionId", sessionId)
     form.append(file.name, file)
+
+    const headers: Record<string, string> = this.getAdditionalHeaders()
 
     return this.csrfRequest<number>(this.buildFileUploadURL(fileUploadUrl), {
       cancelToken,
       method: "PUT",
       data: form,
       responseType: "text",
+      headers,
       onUploadProgress,
     }).then(() => undefined) // If the request succeeds, we don't care about the response body
+  }
+
+  private getAdditionalHeaders(): Record<string, string> {
+    let headers: Record<string, string> = {}
+
+    if (this.fileUploadClientConfig) {
+      headers = {
+        ...headers,
+        ...this.fileUploadClientConfig.headers,
+      }
+    }
+    return headers
   }
 
   /**
@@ -129,9 +164,11 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
     fileUrl: string,
     sessionId: string
   ): Promise<void> {
+    const headers: Record<string, string> = this.getAdditionalHeaders()
     return this.csrfRequest<number>(this.buildFileUploadURL(fileUrl), {
       method: "DELETE",
       data: { sessionId },
+      headers,
     }).then(() => undefined) // If the request succeeds, we don't care about the response body
   }
 
@@ -156,12 +193,12 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
    */
   private requireServerUri(): BaseUriParts {
     const serverUri = this.getServerUri()
-    if (serverUri != null) {
+    if (notNullOrUndefined(serverUri)) {
       this.cachedServerUri = serverUri
       return serverUri
     }
 
-    if (this.cachedServerUri != null) {
+    if (notNullOrUndefined(this.cachedServerUri)) {
       return this.cachedServerUri
     }
 
@@ -179,8 +216,8 @@ export class DefaultStreamlitEndpoints implements StreamlitEndpoints {
     params.url = url
 
     if (this.csrfEnabled) {
-      const xsrfCookie = getCookie("_xsrf")
-      if (xsrfCookie != null) {
+      const xsrfCookie = getCookie("_streamlit_xsrf")
+      if (notNullOrUndefined(xsrfCookie)) {
         params.headers = {
           "X-Xsrftoken": xsrfCookie,
           ...(params.headers || {}),

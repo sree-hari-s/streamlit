@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,11 @@
  */
 
 import React from "react"
-import { emotionLightTheme, mount, mockEndpoints } from "@streamlit/lib"
+
+import { screen } from "@testing-library/react"
+
+import { emotionLightTheme, mockEndpoints, render } from "@streamlit/lib"
+
 import { SidebarProps } from "./Sidebar"
 import ThemedSidebar from "./ThemedSidebar"
 
@@ -25,7 +29,8 @@ function getProps(
   return {
     endpoints: mockEndpoints(),
     appPages: [],
-    onPageChange: jest.fn(),
+    navSections: [],
+    onPageChange: vi.fn(),
     currentPageScriptHash: "page_hash",
     hasElements: true,
     hideSidebarNav: false,
@@ -35,36 +40,40 @@ function getProps(
 
 describe("ThemedSidebar Component", () => {
   it("should render without crashing", () => {
-    const wrapper = mount(<ThemedSidebar {...getProps()} />)
+    render(<ThemedSidebar {...getProps()} />)
 
-    expect(wrapper.find("Sidebar").exists()).toBe(true)
+    expect(screen.getByTestId("stSidebar")).toBeInTheDocument()
   })
 
   it("should switch bgColor and secondaryBgColor", () => {
-    const wrapper = mount(<ThemedSidebar {...getProps()} />)
+    render(<ThemedSidebar {...getProps()} />)
 
-    const updatedTheme = wrapper.find("Sidebar").prop("theme")
-
-    // @ts-expect-error
-    expect(updatedTheme.colors.bgColor).toBe(
-      emotionLightTheme.colors.secondaryBg
-    )
-    // @ts-expect-error
-    expect(updatedTheme.inSidebar).toBe(true)
+    expect(screen.getByTestId("stSidebar")).toHaveStyle({
+      backgroundColor: emotionLightTheme.colors.secondaryBg,
+    })
   })
 
-  it("plumbs appPages, currentPageName, and onPageChange to main Sidebar component", () => {
+  it("plumbs appPages to main Sidebar component", () => {
     const appPages = [
-      { pageName: "streamlit_app", scriptPath: "streamlit_app.py" },
+      {
+        pageName: "streamlit app",
+        scriptPath: "streamlit_app.py",
+        urlPathname: "streamlit_app",
+      },
+      {
+        pageName: "other app page",
+        scriptPath: "other_app_page.py",
+        urlPathname: "other_app_page",
+      },
     ]
-    const wrapper = mount(<ThemedSidebar {...getProps({ appPages })} />)
+    render(<ThemedSidebar {...getProps({ appPages })} />)
 
-    expect(wrapper.find("Sidebar").prop("appPages")).toEqual(appPages)
-    expect(wrapper.find("Sidebar").prop("currentPageScriptHash")).toBe(
-      "page_hash"
-    )
-    expect(typeof wrapper.find("Sidebar").prop("onPageChange")).toBe(
-      "function"
-    )
+    // Check Sidebar & SidebarNav render
+    expect(screen.getByTestId("stSidebar")).toBeInTheDocument()
+    expect(screen.getByTestId("stSidebarNav")).toBeInTheDocument()
+
+    // Check the app pages passed
+    expect(screen.getByText("streamlit app")).toBeInTheDocument()
+    expect(screen.getByText("other app page")).toBeInTheDocument()
   })
 })

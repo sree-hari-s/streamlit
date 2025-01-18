@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
 
 import unittest
 from unittest import mock
@@ -75,6 +77,33 @@ class EventBasedPathWatcherTest(unittest.TestCase):
 
         ro.close()
 
+    def test_works_with_bytes_path(self):
+        """Test that when a file path in bytes, the callback is called."""
+        cb = mock.Mock()
+
+        self.mock_util.path_modification_time = lambda *args: 101.0
+        self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "1"
+
+        ro = event_based_path_watcher.EventBasedPathWatcher("/this/is/my/file.py", cb)
+
+        fo = event_based_path_watcher._MultiPathWatcher.get_singleton()
+        fo._observer.schedule.assert_called_once()
+
+        folder_handler = fo._observer.schedule.call_args[0][0]
+
+        cb.assert_not_called()
+
+        self.mock_util.path_modification_time = lambda *args: 102.0
+        self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "2"
+
+        ev = events.FileSystemEvent(b"/this/is/my/file.py")
+        ev.event_type = events.EVENT_TYPE_MODIFIED
+        folder_handler.on_modified(ev)
+
+        cb.assert_called_once()
+
+        ro.close()
+
     def test_works_with_directories(self):
         """Test that when a directory is modified, the callback is called."""
         cb = mock.Mock()
@@ -93,6 +122,72 @@ class EventBasedPathWatcherTest(unittest.TestCase):
 
         self.mock_util.path_modification_time = lambda *args: 102.0
         self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "2"
+
+        ev = events.FileSystemEvent("/this/is/my/dir")
+        ev.event_type = events.EVENT_TYPE_MODIFIED
+        ev.is_directory = True
+        folder_handler.on_modified(ev)
+
+        cb.assert_called_once()
+
+        ro.close()
+
+    @mock.patch("os.path.isdir")
+    def test_correctly_resolves_watched_folder_path(self, mock_is_dir):
+        mock_is_dir.return_value = True
+        cb = mock.Mock()
+
+        self.mock_util.path_modification_time = lambda *args: 101.0
+        self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "1"
+
+        ro = event_based_path_watcher.EventBasedPathWatcher("/this/is/my/dir", cb)
+
+        fo = event_based_path_watcher._MultiPathWatcher.get_singleton()
+        fo._observer.schedule.assert_called_once()
+
+        folder_path = fo._observer.schedule.call_args[0][1]
+        assert folder_path == "/this/is/my/dir"
+
+        ro.close()
+
+    @mock.patch("os.path.isdir")
+    def test_correctly_resolves_watched_file_path(self, mock_is_dir):
+        mock_is_dir.return_value = False
+        cb = mock.Mock()
+
+        self.mock_util.path_modification_time = lambda *args: 101.0
+        self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "1"
+
+        ro = event_based_path_watcher.EventBasedPathWatcher(
+            "/this/is/my/dir/file.txt", cb
+        )
+
+        fo = event_based_path_watcher._MultiPathWatcher.get_singleton()
+        fo._observer.schedule.assert_called_once()
+
+        folder_path = fo._observer.schedule.call_args[0][1]
+        assert folder_path == "/this/is/my/dir"
+
+        ro.close()
+
+    def test_changed_modification_time_0_0(self):
+        """Test that when a directory is modified, but modification time is 0.0,
+        the callback is called anyway."""
+        cb = mock.Mock()
+
+        self.mock_util.path_modification_time = lambda *args: 0.0
+        self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "42"
+
+        ro = event_based_path_watcher.EventBasedPathWatcher("/this/is/my/dir", cb)
+
+        fo = event_based_path_watcher._MultiPathWatcher.get_singleton()
+        fo._observer.schedule.assert_called_once()
+
+        folder_handler = fo._observer.schedule.call_args[0][0]
+
+        cb.assert_not_called()
+
+        self.mock_util.calc_md5_with_blocking_retries = lambda _, **kwargs: "64"
 
         ev = events.FileSystemEvent("/this/is/my/dir")
         ev.event_type = events.EVENT_TYPE_MODIFIED

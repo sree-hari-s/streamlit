@@ -1,6 +1,6 @@
 {
   "name": "streamlit",
-  "version": "1.26.0",
+  "version": "1.41.1",
   "private": true,
   "workspaces": [
     "app",
@@ -8,28 +8,19 @@
   ],
   "scripts": {
     "start": "yarn workspace @streamlit/app start",
-    "build": "yarn workspace @streamlit/lib build && yarn workspace @streamlit/app build",
-    "buildFast": "yarn buildLib && yarn workspace @streamlit/app buildFast",
-    "buildLib": "yarn workspace @streamlit/lib build",
-    "buildLibProd": "yarn workspace @streamlit/lib build:prod",
-    "buildApp": "yarn workspace @streamlit/app build",
-    "buildAppFast": "yarn workspace @streamlit/app buildFast",
-    "typecheck": "yarn workspace @streamlit/lib typecheck && yarn workspace @streamlit/app typecheck",
-    "lint": "yarn lintApp && yarn lintLib",
-    "lintApp": "yarn workspace @streamlit/app lint",
-    "lintLib": "yarn workspace @streamlit/lib lint",
-    "prettier": "prettier --write --config .prettierrc app/src && prettier --write --config .prettierrc lib/src",
-    "test": "yarn workspace @streamlit/lib test && yarn workspace @streamlit/app test",
-    "testLib": "yarn workspace @streamlit/lib testWatch",
-    "testApp": "yarn workspace @streamlit/app testWatch",
-    "cy:open": "unset NODE_OPTIONS && cypress open --env devicePixelRatio=1",
-    "cy:run": "unset NODE_OPTIONS && cypress run",
-    "cy:run-flaky": "yarn cy:run --config integrationFolder=../e2e_flaky/specs"
+    "buildWithProfiler": "yarn workspace @streamlit/app buildWithProfiler",
+    "lint:interactive": "yarn eslint-interactive ./app/src ./lib/src"
+  },
+  "resolutions": {
+    "nwsapi": "2.2.9",
+    "d3-color": "^3.1.0",
+    "@protobufjs/inquire@npm:^1.1.0": "patch:@protobufjs/inquire@npm%3A1.1.0#~/.yarn/patches/@protobufjs-inquire-npm-1.1.0-3c7759e9ce.patch"
   },
   "browserslist": [
     ">0.2%",
     "not dead",
     "not ie <= 11",
     "not op_mini all"
-  ]
+  ],
+  "packageManager": "yarn@4.5.3"
 }

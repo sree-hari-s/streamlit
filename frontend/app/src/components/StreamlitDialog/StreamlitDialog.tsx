@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,47 +14,37 @@
  * limitations under the License.
  */
 
-import React, { ReactElement, ReactNode, CSSProperties } from "react"
-import {
-  BaseButtonKind,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  ModalButton,
-  SessionInfo,
-  StreamlitMarkdown,
-  IException,
-} from "@streamlit/lib"
-import { HotKeys } from "react-hotkeys"
+import React, { CSSProperties, ReactElement, ReactNode } from "react"
 
 import {
-  ScriptChangedDialog,
-  Props as ScriptChangedDialogProps,
-} from "@streamlit/app/src/components/StreamlitDialog/ScriptChangedDialog"
+  BaseButtonKind,
+  IException,
+  Modal,
+  ModalBody,
+  ModalButton,
+  ModalFooter,
+  ModalHeader,
+  SessionInfo,
+  StreamlitMarkdown,
+  StreamlitSyntaxHighlighter,
+} from "@streamlit/lib"
 import { STREAMLIT_HOME_URL } from "@streamlit/app/src/urls"
-import { Props as SettingsDialogProps, SettingsDialog } from "./SettingsDialog"
+
+import { SettingsDialog, Props as SettingsDialogProps } from "./SettingsDialog"
 import ThemeCreatorDialog, {
   Props as ThemeCreatorDialogProps,
 } from "./ThemeCreatorDialog"
 import { DeployDialog, DeployDialogProps } from "./DeployDialog"
-
 import {
-  StyledRerunHeader,
-  StyledCommandLine,
-  StyledDeployErrorContent,
   StyledAboutInfo,
   StyledAboutLink,
+  StyledDeployErrorContent,
 } from "./styled-components"
 
 export type PlainEventHandler = () => void
 
 interface SettingsProps extends SettingsDialogProps {
   type: DialogType.SETTINGS
-}
-
-interface ScriptChangedProps extends ScriptChangedDialogProps {
-  type: DialogType.SCRIPT_CHANGED
 }
 
 interface ThemeCreatorProps extends ThemeCreatorDialogProps {
@@ -64,9 +54,7 @@ interface ThemeCreatorProps extends ThemeCreatorDialogProps {
 export type DialogProps =
   | AboutProps
   | ClearCacheProps
-  | RerunScriptProps
   | SettingsProps
-  | ScriptChangedProps
   | ScriptCompileErrorProps
   | ThemeCreatorProps
   | WarningProps
@@ -76,9 +64,7 @@ export type DialogProps =
 export enum DialogType {
   ABOUT = "about",
   CLEAR_CACHE = "clearCache",
-  RERUN_SCRIPT = "rerunScript",
   SETTINGS = "settings",
-  SCRIPT_CHANGED = "scriptChanged",
   SCRIPT_COMPILE_ERROR = "scriptCompileError",
   THEME_CREATOR = "themeCreator",
   WARNING = "warning",
@@ -92,12 +78,8 @@ export function StreamlitDialog(dialogProps: DialogProps): ReactNode {
       return aboutDialog(dialogProps)
     case DialogType.CLEAR_CACHE:
       return clearCacheDialog(dialogProps)
-    case DialogType.RERUN_SCRIPT:
-      return rerunScriptDialog(dialogProps)
     case DialogType.SETTINGS:
       return settingsDialog(dialogProps)
-    case DialogType.SCRIPT_CHANGED:
-      return <ScriptChangedDialog {...dialogProps} />
     case DialogType.SCRIPT_COMPILE_ERROR:
       return scriptCompileErrorDialog(dialogProps)
     case DialogType.THEME_CREATOR:
@@ -204,104 +186,35 @@ interface ClearCacheProps {
  * onClose         - callback to close the dialog
  */
 function clearCacheDialog(props: ClearCacheProps): ReactElement {
-  const keyHandlers = {
-    enter: () => props.defaultAction(),
-  }
+  // Markdown New line is 2 spaces + \n
+  const newLineMarkdown = "  \n"
+  const clearCacheInfo = [
+    `**Are you sure you want to clear the app's function caches?**`,
+    "This will remove all cached entries from functions using",
+    "`@st.cache_data` and `@st.cache_resource`.",
+  ].join(newLineMarkdown)
 
-  // Not sure exactly why attach is necessary on the HotKeys
-  // component here but it's not working without it
   return (
-    <HotKeys handlers={keyHandlers} attach={window}>
-      <div data-testid="stClearCacheDialog">
-        <Modal isOpen onClose={props.onClose}>
-          <ModalHeader>Clear caches</ModalHeader>
-          <ModalBody>
-            <div>
-              <b>Are you sure you want to clear the app's function caches?</b>
-            </div>
-            <div>
-              This will remove all cached entries from functions using{" "}
-              <code>@st.cache</code>, <code>@st.cache_data</code>, and{" "}
-              <code>@st.cache_resource</code>.
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <ModalButton
-              kind={BaseButtonKind.TERTIARY}
-              onClick={props.onClose}
-            >
-              Cancel
-            </ModalButton>
-            <ModalButton
-              autoFocus
-              kind={BaseButtonKind.SECONDARY}
-              onClick={props.confirmCallback}
-            >
-              Clear caches
-            </ModalButton>
-          </ModalFooter>
-        </Modal>
-      </div>
-    </HotKeys>
-  )
-}
-
-interface RerunScriptProps {
-  type: DialogType.RERUN_SCRIPT
-
-  /** Callback to get the script's command line */
-  getCommandLine: () => string | string[]
-
-  /** Callback to set the script's command line */
-  setCommandLine: (value: string) => void
-
-  /** Callback to rerun the script */
-  rerunCallback: () => void
-
-  /** Callback to close the dialog */
-  onClose: PlainEventHandler
-
-  /** Callback to run the default action */
-  defaultAction: () => void
-}
-
-/**
- * Dialog shown when the user wants to rerun a script.
- */
-function rerunScriptDialog(props: RerunScriptProps): ReactElement {
-  const keyHandlers = {
-    enter: () => props.defaultAction(),
-  }
-
-  // Not sure exactly why attach is necessary on the HotKeys
-  // component here but it's not working without it
-  return (
-    <HotKeys handlers={keyHandlers} attach={window}>
+    <div data-testid="stClearCacheDialog">
       <Modal isOpen onClose={props.onClose}>
+        <ModalHeader>Clear caches</ModalHeader>
         <ModalBody>
-          <StyledRerunHeader>Command line:</StyledRerunHeader>
-          <div>
-            <StyledCommandLine
-              autoFocus
-              className="command-line"
-              value={props.getCommandLine()}
-              onChange={event => props.setCommandLine(event.target.value)}
-            />
-          </div>
+          <StreamlitMarkdown source={clearCacheInfo} allowHTML={false} />
         </ModalBody>
         <ModalFooter>
-          <ModalButton kind={BaseButtonKind.TERTIARY} onClick={props.onClose}>
+          <ModalButton kind={BaseButtonKind.GHOST} onClick={props.onClose}>
             Cancel
           </ModalButton>
           <ModalButton
+            autoFocus
             kind={BaseButtonKind.SECONDARY}
-            onClick={() => props.rerunCallback()}
+            onClick={props.confirmCallback}
           >
-            Rerun
+            Clear caches
           </ModalButton>
         </ModalFooter>
       </Modal>
-    </HotKeys>
+    </div>
   )
 }
 
@@ -315,16 +228,12 @@ function scriptCompileErrorDialog(
   props: ScriptCompileErrorProps
 ): ReactElement {
   return (
-    <Modal isOpen onClose={props.onClose} size="auto">
+    <Modal isOpen onClose={props.onClose} size="auto" autoFocus={false}>
       <ModalHeader>Script execution error</ModalHeader>
       <ModalBody>
-        <div>
-          <pre>
-            <code>
-              {props.exception ? props.exception.message : "No message"}
-            </code>
-          </pre>
-        </div>
+        <StreamlitSyntaxHighlighter showLineNumbers={false} wrapLines={false}>
+          {props.exception?.message ? props.exception.message : "No message"}
+        </StreamlitSyntaxHighlighter>
       </ModalBody>
       <ModalFooter>
         <ModalButton kind={BaseButtonKind.SECONDARY} onClick={props.onClose}>
@@ -395,7 +304,7 @@ function deployErrorDialog({
         <StyledDeployErrorContent>{msg}</StyledDeployErrorContent>
       </ModalBody>
       <ModalFooter>
-        <ModalButton kind={BaseButtonKind.TERTIARY} onClick={onTryAgain}>
+        <ModalButton kind={BaseButtonKind.GHOST} onClick={onTryAgain}>
           Try again
         </ModalButton>
         <ModalButton

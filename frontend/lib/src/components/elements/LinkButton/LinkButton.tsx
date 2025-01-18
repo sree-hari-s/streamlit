@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-import React, { ReactElement, MouseEvent } from "react"
+import React, { MouseEvent, ReactElement } from "react"
+
 import { LinkButton as LinkButtonProto } from "@streamlit/lib/src/proto"
 import {
-  BaseButtonTooltip,
   BaseButtonKind,
   BaseButtonSize,
+  BaseButtonTooltip,
+  DynamicButtonLabel,
 } from "@streamlit/lib/src/components/shared/BaseButton"
 
 import BaseLinkButton from "./BaseLinkButton"
-import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
 
 export interface Props {
   disabled: boolean
@@ -31,14 +32,16 @@ export interface Props {
   width: number
 }
 
-function LinkButton(props: Props): ReactElement {
+function LinkButton(props: Readonly<Props>): ReactElement {
   const { disabled, element, width } = props
   const style = { width }
 
-  const kind =
-    element.type === "primary"
-      ? BaseButtonKind.PRIMARY
-      : BaseButtonKind.SECONDARY
+  let kind = BaseButtonKind.SECONDARY
+  if (element.type === "primary") {
+    kind = BaseButtonKind.PRIMARY
+  } else if (element.type === "tertiary") {
+    kind = BaseButtonKind.TERTIARY
+  }
 
   // When useContainerWidth true & has help tooltip,
   // we need to pass the container width down to the button
@@ -52,11 +55,7 @@ function LinkButton(props: Props): ReactElement {
   }
 
   return (
-    <div
-      className="row-widget stLinkButton"
-      data-testid="stLinkButton"
-      style={style}
-    >
+    <div className="stLinkButton" data-testid="stLinkButton" style={style}>
       <BaseButtonTooltip help={element.help}>
         {/* We use separate BaseLinkButton instead of BaseButton here, because
         link behavior requires tag <a> instead of <button>.*/}
@@ -71,13 +70,7 @@ function LinkButton(props: Props): ReactElement {
           rel="noreferrer"
           aria-disabled={disabled}
         >
-          <StreamlitMarkdown
-            source={element.label}
-            allowHTML={false}
-            isLabel
-            largerLabel
-            disableLinks
-          />
+          <DynamicButtonLabel icon={element.icon} label={element.label} />
         </BaseLinkButton>
       </BaseButtonTooltip>
     </div>

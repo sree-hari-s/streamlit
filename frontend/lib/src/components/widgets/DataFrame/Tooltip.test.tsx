@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@ import React from "react"
 
 import { screen } from "@testing-library/react"
 
-import "@testing-library/jest-dom"
-
 import { render } from "@streamlit/lib/src/test_util"
 
 import Tooltip, { TooltipProps } from "./Tooltip"
@@ -29,7 +27,7 @@ describe("Dataframe Tooltip", () => {
     top: 100,
     left: 100,
     content: "**This is a tooltip.**",
-    clearTooltip: jest.fn(),
+    clearTooltip: vi.fn(),
   }
 
   test("renders the tooltip with provided content", () => {
@@ -38,7 +36,7 @@ describe("Dataframe Tooltip", () => {
     const tooltipContent = screen.getByText("This is a tooltip.")
     expect(tooltipContent).toBeInTheDocument()
     // Uses markdown to render the content:
-    expect(tooltipContent).toHaveStyle("font-weight: bold")
+    expect(tooltipContent).toHaveStyle("font-weight: 600")
   })
 
   test("renders the tooltip at the correct position", () => {
@@ -46,7 +44,7 @@ describe("Dataframe Tooltip", () => {
       top: 200,
       left: 300,
       content: "Positioned tooltip.",
-      clearTooltip: jest.fn(),
+      clearTooltip: vi.fn(),
     }
 
     render(<Tooltip {...customPositionProps} />)
@@ -54,7 +52,7 @@ describe("Dataframe Tooltip", () => {
     const tooltipContent = screen.getByText("Positioned tooltip.")
     expect(tooltipContent).toBeInTheDocument()
 
-    const invisibleDiv = screen.getByTestId("stTooltipTarget")
+    const invisibleDiv = screen.getByTestId("stDataFrameTooltipTarget")
 
     expect(invisibleDiv).toHaveStyle("position: fixed")
     expect(invisibleDiv).toHaveStyle("top: 200px")

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
  */
 
 import React, { FC, memo } from "react"
+
 import range from "lodash/range"
-import classNames from "classnames"
+
+import { StyledParticles } from "./styled-components"
 
 export interface ParticleProps {
   particleType: number
@@ -27,10 +29,10 @@ export interface Props {
   scriptRunId: string
   numParticles: number
   numParticleTypes: number
-  ParticleComponent: FC<ParticleProps>
+  ParticleComponent: FC<React.PropsWithChildren<ParticleProps>>
 }
 
-const Particles: FC<Props> = ({
+const Particles: FC<React.PropsWithChildren<Props>> = ({
   className,
   scriptRunId,
   numParticles,
@@ -39,16 +41,13 @@ const Particles: FC<Props> = ({
 }: Props) => (
   // Keys should be unique each time, so React replaces the images in the DOM and their animations
   // actually rerun.
-  <div
-    className={classNames(className, "stHidden")}
-    data-testid={`${className}`}
-  >
+  <StyledParticles className={className} data-testid={className}>
     {range(numParticles).map(i => {
       const randNum = Math.floor(Math.random() * numParticleTypes)
 
       return <ParticleComponent key={scriptRunId + i} particleType={randNum} />
     })}
-  </div>
+  </StyledParticles>
 )
 
 export default memo(Particles)

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,38 @@
 
 import { GridCellKind } from "@glideapps/glide-data-grid"
 import { DropdownCellType } from "@glideapps/glide-data-grid-cells"
+import { Bool, Field, Int8 } from "apache-arrow"
 
-import { Type as ArrowType } from "@streamlit/lib/src/dataframes/Quiver"
+import {
+  ArrowType,
+  DataFrameCellType,
+} from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 
-import { BaseColumnProps, isErrorCell, isMissingValueCell } from "./utils"
 import SelectboxColumn, { SelectboxColumnParams } from "./SelectboxColumn"
+import { BaseColumnProps, isErrorCell, isMissingValueCell } from "./utils"
 
 const MOCK_CATEGORICAL_TYPE: ArrowType = {
-  pandas_type: "int8",
-  numpy_type: "categorical",
+  type: DataFrameCellType.DATA,
+  arrowField: new Field("selectbox_column", new Int8(), true),
+  pandasType: {
+    field_name: "selectbox_column",
+    name: "selectbox_column",
+    pandas_type: "int8",
+    numpy_type: "int8",
+    metadata: null,
+  },
 }
 
 const MOCK_BOOLEAN_ARROW_TYPE: ArrowType = {
-  pandas_type: "bool",
-  numpy_type: "bool",
+  type: DataFrameCellType.DATA,
+  arrowField: new Field("selectbox_column", new Bool(), true),
+  pandasType: {
+    field_name: "selectbox_column",
+    name: "selectbox_column",
+    pandas_type: "bool",
+    numpy_type: "bool",
+    metadata: null,
+  },
 }
 
 const SELECTBOX_COLUMN_TEMPLATE: Partial<BaseColumnProps> = {
@@ -40,6 +58,7 @@ const SELECTBOX_COLUMN_TEMPLATE: Partial<BaseColumnProps> = {
   isEditable: true,
   isHidden: false,
   isIndex: false,
+  isPinned: false,
   isStretched: false,
 }
 
@@ -130,6 +149,21 @@ describe("SelectboxColumn", () => {
 
     const errorCell = mockColumn.getCell(null, true)
     expect(isErrorCell(errorCell)).toEqual(true)
+  })
+
+  it("uses faded style for pinned columns", () => {
+    const mockColumn = getSelectboxColumn(
+      MOCK_CATEGORICAL_TYPE,
+      {
+        options: ["foo", "bar"],
+      },
+      {
+        isPinned: true,
+      }
+    )
+
+    const mockCell = mockColumn.getCell("foo")
+    expect(mockCell.style).toEqual("faded")
   })
 
   it("creates error cell if value is not in options", () => {

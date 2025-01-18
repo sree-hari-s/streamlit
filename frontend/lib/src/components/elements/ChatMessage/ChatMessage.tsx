@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,21 @@
  */
 
 import React, { ReactElement } from "react"
+
 import { useTheme } from "@emotion/react"
 import { Face, SmartToy } from "@emotion-icons/material-outlined"
 
 import { Block as BlockProto } from "@streamlit/lib/src/proto"
-import Icon from "@streamlit/lib/src/components/shared/Icon"
+import Icon, { DynamicIcon } from "@streamlit/lib/src/components/shared/Icon"
 import { EmotionTheme } from "@streamlit/lib/src/theme"
 import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
 
 import {
+  StyledAvatarBackground,
+  StyledAvatarIcon,
+  StyledAvatarImage,
   StyledChatMessageContainer,
   StyledMessageContent,
-  StyledAvatarImage,
-  StyledAvatarIcon,
-  StyledAvatarBackground,
 } from "./styled-components"
 
 interface ChatMessageAvatarProps {
@@ -38,7 +39,9 @@ interface ChatMessageAvatarProps {
   endpoints: StreamlitEndpoints
 }
 
-function ChatMessageAvatar(props: ChatMessageAvatarProps): ReactElement {
+function ChatMessageAvatar(
+  props: Readonly<ChatMessageAvatarProps>
+): ReactElement {
   const { avatar, avatarType, name, endpoints } = props
   const theme: EmotionTheme = useTheme()
 
@@ -57,7 +60,7 @@ function ChatMessageAvatar(props: ChatMessageAvatarProps): ReactElement {
         if (avatar === "user") {
           return (
             <StyledAvatarIcon
-              data-testid="chatAvatarIcon-user"
+              data-testid="stChatMessageAvatarUser"
               background={theme.colors.red60}
             >
               <Icon content={Face} size="lg" />
@@ -66,11 +69,21 @@ function ChatMessageAvatar(props: ChatMessageAvatarProps): ReactElement {
         } else if (avatar === "assistant") {
           return (
             <StyledAvatarIcon
-              data-testid="chatAvatarIcon-assistant"
+              data-testid="stChatMessageAvatarAssistant"
               background={theme.colors.orange60}
             >
               <Icon content={SmartToy} size="lg" />
             </StyledAvatarIcon>
+          )
+        } else if (avatar.startsWith(":material")) {
+          return (
+            <StyledAvatarBackground data-testid="stChatMessageAvatarCustom">
+              <DynamicIcon
+                size="lg"
+                iconValue={avatar}
+                color={theme.colors.bodyText}
+              />
+            </StyledAvatarBackground>
           )
         }
     }
@@ -89,7 +102,7 @@ export interface ChatMessageProps {
   element: BlockProto.ChatMessage
 }
 
-const ChatMessage: React.FC<ChatMessageProps> = ({
+const ChatMessage: React.FC<React.PropsWithChildren<ChatMessageProps>> = ({
   endpoints,
   element,
   children,

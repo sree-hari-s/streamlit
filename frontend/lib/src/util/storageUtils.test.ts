@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ describe("localStorageAvailable", () => {
   // doesn't work. Accessing .__proto__ here isn't too bad of a crime since
   // it's test code.
   const breakLocalStorage = (): void => {
-    jest
+    vi
       // eslint-disable-next-line no-proto
       .spyOn(window.localStorage.__proto__, "setItem")
       .mockImplementation(() => {
@@ -30,7 +30,7 @@ describe("localStorageAvailable", () => {
   }
 
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
     window.localStorage.clear()
   })
 

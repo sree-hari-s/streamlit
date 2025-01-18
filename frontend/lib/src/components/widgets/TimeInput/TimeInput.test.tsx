@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,17 @@
  */
 
 import React from "react"
-import "@testing-library/jest-dom"
-import { screen, fireEvent } from "@testing-library/react"
-import { act } from "react-dom/test-utils"
+
+import { act, screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
 import { render } from "@streamlit/lib/src/test_util"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 import {
   LabelVisibilityMessage as LabelVisibilityMessageProto,
   TimeInput as TimeInputProto,
 } from "@streamlit/lib/src/proto"
+
 import TimeInput, { Props } from "./TimeInput"
 
 const getProps = (
@@ -40,8 +42,8 @@ const getProps = (
   width: 0,
   disabled: disabled,
   widgetMgr: new WidgetStateManager({
-    sendRerunBackMsg: jest.fn(),
-    formsDataChanged: jest.fn(),
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
   }),
 })
 
@@ -49,7 +51,7 @@ describe("TimeInput widget", () => {
   it("renders without crashing", () => {
     const props = getProps()
     render(<TimeInput {...props} />)
-    const timeDisplay = screen.getByTestId("stTimeInput-timeDisplay")
+    const timeDisplay = screen.getByTestId("stTimeInputTimeDisplay")
 
     expect(timeDisplay).toBeInTheDocument()
   })
@@ -89,13 +91,27 @@ describe("TimeInput widget", () => {
 
   it("sets widget value on mount", () => {
     const props = getProps()
-    jest.spyOn(props.widgetMgr, "setStringValue")
+    vi.spyOn(props.widgetMgr, "setStringValue")
     render(<TimeInput {...props} />)
 
     expect(props.widgetMgr.setStringValue).toHaveBeenCalledWith(
       props.element,
       props.element.default,
-      { fromUi: false }
+      { fromUi: false },
+      undefined
+    )
+  })
+
+  it("can pass fragmentId to setStringValue", () => {
+    const props = { ...getProps(), fragmentId: "myFragmentId" }
+    vi.spyOn(props.widgetMgr, "setStringValue")
+    render(<TimeInput {...props} />)
+
+    expect(props.widgetMgr.setStringValue).toHaveBeenCalledWith(
+      props.element,
+      props.element.default,
+      { fromUi: false },
+      "myFragmentId"
     )
   })
 
@@ -114,7 +130,7 @@ describe("TimeInput widget", () => {
     const widgetLabel = screen.getByTestId("stWidgetLabel")
     expect(widgetLabel).toHaveAttribute("disabled")
 
-    const timeDisplay = screen.getByTestId("stTimeInput-timeDisplay")
+    const timeDisplay = screen.getByTestId("stTimeInputTimeDisplay")
     expect(timeDisplay).toHaveAttribute("disabled")
   })
 
@@ -122,7 +138,7 @@ describe("TimeInput widget", () => {
     const props = getProps()
     render(<TimeInput {...props} />)
 
-    const timeDisplay = screen.getByTestId("stTimeInput-timeDisplay")
+    const timeDisplay = screen.getByTestId("stTimeInputTimeDisplay")
     expect(timeDisplay).toHaveTextContent("12:45")
   })
 
@@ -137,60 +153,63 @@ describe("TimeInput widget", () => {
     expect(inputNode).toBeInTheDocument()
   })
 
-  it("sets the widget value on change", () => {
+  it("sets the widget value on change", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    jest.spyOn(props.widgetMgr, "setStringValue")
+    vi.spyOn(props.widgetMgr, "setStringValue")
 
     render(<TimeInput {...props} />)
     // Div containing the selected time as a value prop and as text
-    const timeDisplay = screen.getByTestId("stTimeInput-timeDisplay")
+    const timeDisplay = screen.getByTestId("stTimeInputTimeDisplay")
 
     // Change the widget value
     if (timeDisplay) {
       // Select the time input dropdown
-      fireEvent.click(timeDisplay)
+      await user.click(timeDisplay)
       // Arrow up from 12:45 to 12:30 (since step in 15 min intervals)
-      fireEvent.keyDown(timeDisplay, { key: "ArrowUp", code: 38 })
+      await user.keyboard("{ArrowUp}")
       // Hit enter to select the new time
-      fireEvent.keyDown(timeDisplay, { key: "Enter", code: 13 })
+      await user.keyboard("{Enter}")
     }
 
     expect(props.widgetMgr.setStringValue).toHaveBeenLastCalledWith(
       props.element,
       "12:30",
-      { fromUi: true }
+      { fromUi: true },
+      undefined
     )
 
     expect(timeDisplay).toHaveAttribute("value", "12:30")
     expect(timeDisplay).toHaveTextContent("12:30")
   })
 
-  it("resets its value when form is cleared", () => {
+  it("resets its value when form is cleared", async () => {
+    const user = userEvent.setup()
     // Create a widget in a clearOnSubmit form
     const props = getProps({ formId: "form" })
-    props.widgetMgr.setFormClearOnSubmit("form", true)
+    props.widgetMgr.setFormSubmitBehaviors("form", true)
 
-    jest.spyOn(props.widgetMgr, "setStringValue")
+    vi.spyOn(props.widgetMgr, "setStringValue")
 
     render(<TimeInput {...props} />)
     // Div containing the selected time as a value prop and as text
-    const timeDisplay = screen.getByTestId("stTimeInput-timeDisplay")
+    const timeDisplay = screen.getByTestId("stTimeInputTimeDisplay")
 
     // Change the widget value
     if (timeDisplay) {
       // Select the time input dropdown
-      fireEvent.click(timeDisplay)
+      await user.click(timeDisplay)
       // Arrow down twice from 12:45 to 13:15 (since step in 15 min intervals)
-      fireEvent.keyDown(timeDisplay, { key: "ArrowDown", code: 40 })
-      fireEvent.keyDown(timeDisplay, { key: "ArrowDown", code: 40 })
+      await user.keyboard("{ArrowDown}{ArrowDown}")
       // Hit enter to select the new time
-      fireEvent.keyDown(timeDisplay, { key: "Enter", code: 13 })
+      await user.keyboard("{Enter}")
     }
 
     expect(props.widgetMgr.setStringValue).toHaveBeenLastCalledWith(
       props.element,
       "13:15",
-      { fromUi: true }
+      { fromUi: true },
+      undefined
     )
 
     expect(timeDisplay).toHaveAttribute("value", "13:15")
@@ -198,7 +217,7 @@ describe("TimeInput widget", () => {
 
     // "Submit" the form
     act(() => {
-      props.widgetMgr.submitForm("form")
+      props.widgetMgr.submitForm("form", undefined)
     })
 
     // Our widget should be reset, and the widgetMgr should be updated
@@ -207,7 +226,8 @@ describe("TimeInput widget", () => {
       props.element.default,
       {
         fromUi: true,
-      }
+      },
+      undefined
     )
 
     expect(timeDisplay).toHaveAttribute("value", "12:45")

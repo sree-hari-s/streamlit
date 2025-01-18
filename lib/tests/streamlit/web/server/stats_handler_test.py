@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from __future__ import annotations
 
 from unittest.mock import MagicMock
 
@@ -46,11 +48,11 @@ class StatsHandlerTest(tornado.testing.AsyncHTTPTestCase):
         self.assertEqual(200, response.code)
 
         expected_body = (
-            "# TYPE cache_memory_bytes gauge\n"
-            "# UNIT cache_memory_bytes bytes\n"
-            "# HELP Total memory consumed by a cache.\n"
-            "# EOF\n"
-        ).encode("utf-8")
+            b"# TYPE cache_memory_bytes gauge\n"
+            b"# UNIT cache_memory_bytes bytes\n"
+            b"# HELP Total memory consumed by a cache.\n"
+            b"# EOF\n"
+        )
 
         self.assertEqual(expected_body, response.body)
 
@@ -85,13 +87,13 @@ class StatsHandlerTest(tornado.testing.AsyncHTTPTestCase):
         )
 
         expected_body = (
-            "# TYPE cache_memory_bytes gauge\n"
-            "# UNIT cache_memory_bytes bytes\n"
-            "# HELP Total memory consumed by a cache.\n"
-            'cache_memory_bytes{cache_type="st.singleton",cache="foo"} 128\n'
-            'cache_memory_bytes{cache_type="st.memo",cache="bar"} 256\n'
-            "# EOF\n"
-        ).encode("utf-8")
+            b"# TYPE cache_memory_bytes gauge\n"
+            b"# UNIT cache_memory_bytes bytes\n"
+            b"# HELP Total memory consumed by a cache.\n"
+            b'cache_memory_bytes{cache_type="st.singleton",cache="foo"} 128\n'
+            b'cache_memory_bytes{cache_type="st.memo",cache="bar"} 256\n'
+            b"# EOF\n"
+        )
 
         self.assertEqual(expected_body, response.body)
 

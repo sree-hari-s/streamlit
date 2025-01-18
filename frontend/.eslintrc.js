@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+const vitest = require("eslint-plugin-vitest")
 
 module.exports = {
   env: {
@@ -34,10 +36,10 @@ module.exports = {
     // This will display prettier errors as ESLint errors.
     // Make sure this is always the last configuration in the extends array.
     "plugin:prettier/recommended",
-    // Recommended Jest configuration to enforce good testing practices
-    "plugin:jest/recommended",
     // Uses the recommended rules from React Testing Library:
     "plugin:testing-library/react",
+    // Uses the recommended rules from lodash
+    "plugin:lodash/recommended",
   ],
   // Specifies the ESLint parser
   parser: "@typescript-eslint/parser",
@@ -60,21 +62,29 @@ module.exports = {
     "**/vendor/*",
     "**/node_modules/*",
   ],
-  plugins: ["no-relative-import-paths"],
+  plugins: [
+    "no-relative-import-paths",
+    "streamlit-custom",
+    "vitest",
+    "react-compiler",
+  ],
   // Place to specify ESLint rules.
   // Can be used to overwrite rules specified from the extended configs
   rules: {
+    // Recommended vitest configuration to enforce good testing practices
+    ...vitest.configs.recommended.rules,
     // Use `const` or `let` instead of `var`
     "no-var": "error",
+    // Prevent unintentional use of `console.log`
+    "no-console": "error",
+    // Prevent unintentional use of `debugger`
+    "no-debugger": "error",
     // We don't use PropTypes
     "react/prop-types": "off",
     // We don't escape entities
     "react/no-unescaped-entities": "off",
     // Some of these are being caught erroneously
     "@typescript-eslint/camelcase": "off",
-    // Console statements are currently allowed,
-    // but we may want to reconsider this!
-    "@typescript-eslint/no-console": "off",
     // Empty interfaces are ok
     "@typescript-eslint/no-empty-interface": "off",
     // Empty functions are ok
@@ -121,6 +131,15 @@ module.exports = {
       "LabeledStatement",
       "WithStatement",
     ],
+    "no-restricted-globals": [
+      "error",
+      {
+        name: "localStorage",
+        message:
+          "Please use window.localStorage instead since localStorage is not " +
+          "supported in some browsers (e.g. Android WebView).",
+      },
+    ],
     // Allow foo.hasOwnProperty("bar")
     "no-prototype-builtins": "off",
     // Imports should be `import "./FooModule"`, not `import "./FooModule.js"`
@@ -154,7 +173,81 @@ module.exports = {
       { allowSameFolder: true, rootDir: "src", prefix: "src" },
     ],
     "no-else-return": ["error", { allowElseIf: true }],
+    "lodash/prefer-noop": "off",
+    "lodash/prefer-constant": "off",
+    "lodash/prefer-lodash-method": "off",
+    "lodash/prefer-lodash-typecheck": "off",
+    "lodash/prefer-get": "off",
+    "lodash/prefer-includes": "off",
+    "lodash/prefer-is-nil": "off",
+    "lodash/prefer-matches": "off",
+    "lodash/path-style": "off",
+    "sort-imports": [
+      "error",
+      {
+        ignoreCase: true,
+        ignoreDeclarationSort: true,
+      },
+    ],
+    "import/order": [
+      1,
+      {
+        pathGroups: [
+          {
+            pattern: "react",
+            group: "external",
+            position: "before",
+          },
+          {
+            pattern: "@streamlit/**",
+            group: "internal",
+            position: "before",
+          },
+        ],
+        pathGroupsExcludedImportTypes: ["react"],
+        groups: [
+          "external",
+          "builtin",
+          "internal",
+          "parent",
+          "sibling",
+          "index",
+        ],
+        "newlines-between": "always",
+      },
+    ],
+    "react-compiler/react-compiler": "error",
+    "streamlit-custom/no-hardcoded-theme-values": "error",
+    "streamlit-custom/use-strict-null-equality-checks": "error",
+    "no-restricted-imports": [
+      "error",
+      {
+        paths: [
+          {
+            name: "timezone-mock",
+            message: "Please use the withTimezones test harness instead",
+          },
+        ],
+      },
+    ],
   },
+  overrides: [
+    {
+      // allow hardcoded styles in our test files and in the theme definitions
+      files: ["**/*.test.ts", "**/*.test.tsx", "lib/src/theme/**/*"],
+      rules: {
+        "streamlit-custom/no-hardcoded-theme-values": ["off"],
+      },
+    },
+    {
+      // test-only rules
+      files: ["**/*.test.ts", "**/*.test.tsx"],
+      extends: ["plugin:testing-library/react"],
+      rules: {
+        "testing-library/prefer-user-event": "error",
+      },
+    },
+  ],
   settings: {
     react: {
       // Tells eslint-plugin-react to automatically detect

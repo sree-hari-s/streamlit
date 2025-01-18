@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,13 +15,15 @@
  */
 
 import React, { ReactElement } from "react"
-import { AppContext } from "@streamlit/app/src/components/AppContext"
+
 import {
-  ThemeProvider,
   createTheme,
-  ThemeConfig,
   LibContext,
+  ThemeConfig,
+  ThemeProvider,
 } from "@streamlit/lib"
+import { AppContext } from "@streamlit/app/src/components/AppContext"
+
 import Sidebar, { SidebarProps } from "./Sidebar"
 
 const createSidebarTheme = (theme: ThemeConfig): ThemeConfig => {

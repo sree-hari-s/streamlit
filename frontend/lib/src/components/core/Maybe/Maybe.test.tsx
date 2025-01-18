@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,87 +14,87 @@
  * limitations under the License.
  */
 
-import { ReactWrapper } from "enzyme"
-import React from "react"
-import { mount } from "@streamlit/lib/src/test_util"
+import React, { FC } from "react"
+
+import { screen } from "@testing-library/react"
+
+import { render } from "@streamlit/lib/src/test_util"
+
 import Maybe from "./Maybe"
 
 interface OuterProps {
   name: string
+  enable: boolean
 }
 
 interface InnerProps {
   name: string
 }
-const Inner = (props: InnerProps): any => <div>{props.name}</div>
+
+let innerRenderCount = 0
+const Inner: FC<InnerProps> = props => {
+  // Side-effect: mutable variable for testing render counts
+  // TODO: Update to match React best practices
+  // eslint-disable-next-line react-compiler/react-compiler
+  innerRenderCount += 1
+  return <div>{props.name}</div>
+}
+
+const Outer: FC<OuterProps> = props => (
+  <Maybe enable={props.enable}>
+    <Inner name={props.name} />
+  </Maybe>
+)
 
 describe("The Maybe component", () => {
+  beforeEach(() => {
+    innerRenderCount = 0
+  })
+
   describe("when enable is true", () => {
-    let component: ReactWrapper
+    it("should render when the props of an enclosing element update", () => {
+      const { rerender } = render(<Outer name={"old again"} enable={true} />)
 
-    beforeEach(() => {
-      const Outer = (props: OuterProps): any => (
-        <Maybe enable={true}>
-          <Inner name={props.name} />
-        </Maybe>
-      )
-      component = mount(<Outer name={"old again"} />)
+      expect(innerRenderCount).toBe(1)
+      expect(screen.getByText("old again")).toBeVisible()
+
+      rerender(<Outer name={"new name"} enable={true} />)
+
+      expect(innerRenderCount).toBe(2)
+      expect(screen.getByText("new name")).toBeVisible()
     })
 
-    afterEach(() => {
-      component.unmount()
-      jest.restoreAllMocks()
-    })
+    it("should update when a Maybe is first disabled", () => {
+      const { rerender } = render(<Outer name={"old again"} enable={false} />)
 
-    it("should invoke the render method when the props of an enclosing element update", () => {
-      const spyShouldComponentUpdate = jest.spyOn(
-        Maybe.prototype,
-        "shouldComponentUpdate"
-      )
-      const spyRender = jest.spyOn(Maybe.prototype, "render")
-      component.setProps({ name: "new name" })
-      expect(spyShouldComponentUpdate).toHaveBeenCalled()
-      expect(spyRender).toHaveBeenCalled()
-    })
+      expect(innerRenderCount).toBe(1)
+      expect(screen.getByText("old again")).toBeVisible()
 
-    it("should call render() when a Maybe is first disabled", () => {
-      const spyShouldComponentUpdate = jest.spyOn(
-        Maybe.prototype,
-        "shouldComponentUpdate"
-      )
-      const spyRender = jest.spyOn(Maybe.prototype, "render")
-      component.setProps({ name: "new name", enable: false })
-      expect(spyShouldComponentUpdate).toHaveBeenCalled()
-      expect(spyRender).toHaveBeenCalled()
+      rerender(<Outer name={"new name"} enable={true} />)
+
+      expect(innerRenderCount).toBe(2)
+      // Because enable changes between renders, the inner component should be
+      // rerendered.
+      expect(screen.queryByText("new name")).toBeVisible()
     })
   })
 
   describe("when enable is false", () => {
-    let component: ReactWrapper
+    it("should not render children when disabled", () => {
+      const { rerender } = render(<Outer name={"old again"} enable={false} />)
 
-    beforeEach(() => {
-      const Outer = (props: OuterProps): any => (
-        <Maybe enable={false}>
-          <Inner name={props.name} />
-        </Maybe>
-      )
-      component = mount(<Outer name={"old again"} />)
-    })
+      expect(innerRenderCount).toBe(1)
+      expect(screen.queryByText("old again")).toBeVisible()
 
-    afterEach(() => {
-      component.unmount()
-      jest.restoreAllMocks()
-    })
+      rerender(<Outer name={"new name"} enable={false} />)
+      rerender(<Outer name={"new name"} enable={false} />)
+      rerender(<Outer name={"new name"} enable={false} />)
 
-    it("should not invoke the render method when the props of an enclosing element update", () => {
-      const spyShouldComponentUpdate = jest.spyOn(
-        Maybe.prototype,
-        "shouldComponentUpdate"
-      )
-      const spyRender = jest.spyOn(Maybe.prototype, "render")
-      component.setProps({ name: "new name" })
-      expect(spyShouldComponentUpdate).toHaveBeenCalled()
-      expect(spyRender).toHaveBeenCalledTimes(0)
+      // Despite rerendering multiple times, the inner component should only
+      // render once at the start.
+      expect(innerRenderCount).toBe(1)
+      expect(screen.queryByText("old again")).toBeVisible()
+      expect(screen.queryByText("new name")).not.toBeInTheDocument()
     })
   })
 })

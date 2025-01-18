@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,9 @@
  */
 
 import { GridCellKind, ImageCell } from "@glideapps/glide-data-grid"
+import { Field, Utf8 } from "apache-arrow"
+
+import { DataFrameCellType } from "@streamlit/lib/src/dataframes/arrowTypeUtils"
 
 import ImageColumn from "./ImageColumn"
 
@@ -26,12 +29,18 @@ const MOCK_IMAGE_COLUMN_PROPS = {
   isEditable: false,
   isHidden: false,
   isIndex: false,
+  isPinned: false,
   isStretched: false,
   arrowType: {
-    // The arrow type of the underlying data is
-    // not used for anything inside the column.
-    pandas_type: "unicode",
-    numpy_type: "object",
+    type: DataFrameCellType.DATA,
+    arrowField: new Field("image_column", new Utf8(), true),
+    pandasType: {
+      field_name: "image_column",
+      name: "image_column",
+      pandas_type: "unicode",
+      numpy_type: "object",
+      metadata: null,
+    },
   },
 }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,26 +15,30 @@
  */
 
 import React, { ReactElement } from "react"
+
 import { isFromMac } from "@streamlit/lib/src/util/utils"
 import { StyledWidgetInstructions } from "@streamlit/lib/src/components/widgets/BaseWidget"
+
 import { StyledMessage } from "./styled-components"
 
 export interface Props {
   dirty: boolean
   value: string
+  inForm: boolean
   maxLength?: number
   className?: string
   type?: "multiline" | "single" | "chat"
-  inForm: boolean
+  allowEnterToSubmit?: boolean
 }
 
 const InputInstructions = ({
   dirty,
   value,
+  inForm,
   maxLength,
   className,
   type = "single",
-  inForm,
+  allowEnterToSubmit = true,
 }: Props): ReactElement => {
   const messages: ReactElement[] = []
   const addMessage = (text: string, shouldBlink = false): void => {
@@ -49,7 +53,8 @@ const InputInstructions = ({
     )
   }
 
-  if (dirty) {
+  // Show enter instruction if not a form or form allows Enter to submit
+  if (allowEnterToSubmit) {
     const toSubmitFormOrApplyText = inForm ? "submit form" : "apply"
     if (type === "multiline") {
       const commandKey = isFromMac() ? "⌘" : "Ctrl"

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,11 @@
  */
 
 import React from "react"
-import { LabelVisibilityOptions } from "@streamlit/lib/src/util/utils"
+
+import {
+  isNullOrUndefined,
+  LabelVisibilityOptions,
+} from "@streamlit/lib/src/util/utils"
 import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
 
 import { StyledWidgetLabel } from "./styled-components"
@@ -32,6 +36,9 @@ export interface LabelProps {
 
   // Used to specify whether widget is visible or not.
   labelVisibility?: LabelVisibilityOptions
+
+  // Associates the label with the input field programatically. Makes it possible to focus input by clicking on label.
+  htmlFor?: string
 }
 
 export function WidgetLabel({
@@ -39,8 +46,9 @@ export function WidgetLabel({
   children,
   disabled,
   labelVisibility,
+  htmlFor,
 }: LabelProps): React.ReactElement {
-  if (label == null) {
+  if (isNullOrUndefined(label)) {
     return <></>
   }
 
@@ -52,6 +60,7 @@ export function WidgetLabel({
       aria-hidden="true"
       disabled={disabled}
       labelVisibility={labelVisibility}
+      htmlFor={htmlFor}
     >
       <StreamlitMarkdown source={label} allowHTML={false} isLabel />
       {children}

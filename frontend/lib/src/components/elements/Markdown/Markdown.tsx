@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
 import React, { ReactElement } from "react"
+
+import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
 import { Markdown as MarkdownProto } from "@streamlit/lib/src/proto"
 import {
   InlineTooltipIcon,
@@ -34,12 +35,15 @@ export interface MarkdownProps {
 export default function Markdown({
   width,
   element,
-}: MarkdownProps): ReactElement {
+}: Readonly<MarkdownProps>): ReactElement {
   const styleProp = { width }
+
   return (
-    <div className="stMarkdown" style={styleProp} data-testid="stMarkdown">
+    <div className="stMarkdown" data-testid="stMarkdown" style={styleProp}>
       {element.help ? (
-        <StyledLabelHelpWrapper>
+        <StyledLabelHelpWrapper
+          isLatex={element.elementType === MarkdownProto.Type.LATEX}
+        >
           <StreamlitMarkdown
             isCaption={element.isCaption}
             source={element.body}

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,81 +15,40 @@
  */
 
 import styled from "@emotion/styled"
-import axios from "axios"
 
 import {
-  IAllowedMessageOriginsResponse,
+  LOG,
+  PING_MAXIMUM_RETRY_PERIOD_MS,
+  PING_MINIMUM_RETRY_PERIOD_MS,
+  WEBSOCKET_STREAM_PATH,
+  WEBSOCKET_TIMEOUT_MS,
+} from "@streamlit/app/src/connection/constants"
+import {
+  Event,
+  OnConnectionStateChange,
+  OnMessage,
+  OnRetry,
+} from "@streamlit/app/src/connection/types"
+import {
+  BackMsg,
+  BaseUriParts,
+  buildWsUri,
+  ForwardMsg,
   ForwardMsgCache,
+  getCookie,
+  IBackMsg,
+  IHostConfigResponse,
+  isNullOrUndefined,
   logError,
   logMessage,
   logWarning,
+  notNullOrUndefined,
   PerformanceEvents,
-  Resolver,
   SessionInfo,
-  BaseUriParts,
-  buildHttpUri,
-  buildWsUri,
   StreamlitEndpoints,
-  BackMsg,
-  ForwardMsg,
-  IBackMsg,
 } from "@streamlit/lib"
 import { ConnectionState } from "@streamlit/app/src/connection/ConnectionState"
-import React, { Fragment } from "react"
-
-/**
- * Name of the logger.
- */
-const LOG = "WebsocketConnection"
-
-/**
- * The path where we should ping (via HTTP) to see if the server is up.
- */
-const SERVER_PING_PATH = "_stcore/health"
-
-/**
- * The path to fetch the whitelist for accepting cross-origin messages.
- */
-const ALLOWED_ORIGINS_PATH = "_stcore/allowed-message-origins"
-
-/**
- * The path of the server's websocket endpoint.
- */
-const WEBSOCKET_STREAM_PATH = "_stcore/stream"
-
-/**
- * Min and max wait time between pings in millis.
- */
-const PING_MINIMUM_RETRY_PERIOD_MS = 500
-const PING_MAXIMUM_RETRY_PERIOD_MS = 1000 * 60
-
-/**
- * Ping timeout in millis.
- */
-const PING_TIMEOUT_MS = 15 * 1000
-
-/**
- * Timeout when attempting to connect to a websocket, in millis.
- */
-const WEBSOCKET_TIMEOUT_MS = 15 * 1000
-
-/**
- * If the ping retrieves a 403 status code a message will be displayed.
- * This constant is the link to the documentation.
- */
-export const CORS_ERROR_MESSAGE_DOCUMENTATION_LINK =
-  "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS"
-
-type OnMessage = (ForwardMsg: any) => void
-type OnConnectionStateChange = (
-  connectionState: ConnectionState,
-  errMsg?: string
-) => void
-type OnRetry = (
-  totalTries: number,
-  errorNode: React.ReactNode,
-  retryTimeout: number
-) => void
+import { doInitPings } from "@streamlit/app/src/connection/DoInitPings"
 
 export interface Args {
   /** The application's SessionInfo instance */
@@ -134,10 +93,10 @@ export interface Args {
   resetHostAuthToken: () => void
 
   /**
-   * Function to set the list of origins that this app should accept
-   * cross-origin messages from (if in a relevant deployment scenario).
+   * Function to set the host config and allowed-message-origins for this app (if in a relevant deployment
+   * scenario).
    */
-  setAllowedOriginsResp: (resp: IAllowedMessageOriginsResponse) => void
+  onHostConfigResp: (resp: IHostConfigResponse) => void
 }
 
 interface MessageQueue {
@@ -165,14 +124,6 @@ interface MessageQueue {
  *                    :
  *   <ANY_STATE> ──────────────> DISCONNECTED_FOREVER
  */
-type Event =
-  | "INITIALIZED"
-  | "CONNECTION_CLOSED"
-  | "CONNECTION_ERROR"
-  | "CONNECTION_SUCCEEDED"
-  | "CONNECTION_TIMED_OUT"
-  | "SERVER_PING_SUCCEEDED"
-  | "FATAL_ERROR" // Unrecoverable error. This should never happen!
 
 /**
  * This class connects to the server and gets deltas over a websocket connection.
@@ -256,11 +207,7 @@ export class WebsocketConnection {
     // Perform pre-callback actions when entering certain states.
     switch (this.state) {
       case ConnectionState.PINGING_SERVER:
-        this.pingServer(
-          this.args.sessionInfo.isSet
-            ? this.args.sessionInfo.current.commandLine
-            : undefined
-        )
+        this.pingServer()
         break
 
       default:
@@ -367,39 +314,42 @@ export class WebsocketConnection {
     )
   }
 
-  private async pingServer(userCommandLine?: string): Promise<void> {
+  private async pingServer(): Promise<void> {
     this.uriIndex = await doInitPings(
       this.args.baseUriPartsList,
       PING_MINIMUM_RETRY_PERIOD_MS,
       PING_MAXIMUM_RETRY_PERIOD_MS,
       this.args.onRetry,
-      this.args.setAllowedOriginsResp,
-      userCommandLine
+      this.args.onHostConfigResp
     )
 
     this.stepFsm("SERVER_PING_SUCCEEDED")
   }
 
   /**
-   * Get the session token to use to initialize a WebSocket connection.
+   * Get the session tokens to use to initialize a WebSocket connection.
    *
-   * There are two scenarios that are considered here:
-   *   1. If this Streamlit is embedded in a page that will be passing an
-   *      external, opaque auth token to it, we get it using claimHostAuthToken
-   *      and return it. This only occurs in deployment environments where
-   *      we're not connecting to the usual Tornado server, so we don't have to
-   *      worry about what this token actually is/does.
-   *   2. Otherwise, claimHostAuthToken will resolve immediately to undefined,
-   *      in which case we return the sessionId of the last session this
-   *      browser tab connected to (or undefined if this is the first time this
-   *      tab has connected to the Streamlit server). This sessionId is used to
-   *      attempt to reconnect to an existing session to handle transient
-   *      disconnects.
+   * This method returns an array containing either one or two elements:
+   *   1. The first element contains an auth token to be used in environments
+   *      where the parent frame of this app needs to pass down an external
+   *      auth token. If no token is provided, a placeholder is used.
+   *   2. The second element is the session ID to attempt to reconnect to if
+   *      one is available (that is, if this websocket has disconnected and is
+   *      reconnecting). On the initial connection attempt, this is unset and
+   *      the return value of this method is a singleton array.
    */
-  private async getSessionToken(): Promise<string | undefined> {
+  private async getSessionTokens(): Promise<Array<string>> {
     const hostAuthToken = await this.args.claimHostAuthToken()
+    const xsrfCookie = getCookie("_streamlit_xsrf")
     this.args.resetHostAuthToken()
-    return hostAuthToken || this.args.sessionInfo.last?.sessionId
+    return [
+      // NOTE: We have to set the auth token to some arbitrary placeholder if
+      // not provided since the empty string is an invalid protocol option.
+      hostAuthToken ?? xsrfCookie ?? "PLACEHOLDER_AUTH_TOKEN",
+      ...(this.args.sessionInfo.last?.sessionId
+        ? [this.args.sessionInfo.last?.sessionId]
+        : []),
+    ]
   }
 
   private async connectToWebSocket(): Promise<void> {
@@ -408,7 +358,7 @@ export class WebsocketConnection {
       WEBSOCKET_STREAM_PATH
     )
 
-    if (this.websocket != null) {
+    if (notNullOrUndefined(this.websocket)) {
       // This should never happen. We set the websocket to null in both FSM
       // nodes that lead to this one.
       throw new Error("Websocket already exists")
@@ -420,18 +370,16 @@ export class WebsocketConnection {
     // parameter to the WebSocket constructor) here in a slightly unfortunate
     // but necessary way. The browser WebSocket API doesn't allow us to set
     // arbitrary HTTP headers, and this header is the only one where we have
-    // the ability to set it to arbitrary values. Thus, we use it to pass an
-    // auth token from client to server as the *second* value in the list.
+    // the ability to set it to arbitrary values. Thus, we use it to pass auth
+    // and session tokens from client to server as the second/third values in
+    // the list.
     //
-    // The reason why the auth token is set as the second value is that, when
-    // Sec-WebSocket-Protocol is set, many clients expect the server to respond
-    // with a selected subprotocol to use. We don't want that reply to be the
-    // auth token, so we just hard-code it to "streamlit".
-    const sessionToken = await this.getSessionToken()
-    this.websocket = new WebSocket(uri, [
-      "streamlit",
-      ...(sessionToken ? [sessionToken] : []),
-    ])
+    // The reason why these tokens are set as the second/third values is that,
+    // when Sec-WebSocket-Protocol is set, many clients expect the server to
+    // respond with a selected subprotocol to use. We don't want that reply to
+    // contain sensitive data, so we just hard-code it to "streamlit".
+    const sessionTokens = await this.getSessionTokens()
+    this.websocket = new WebSocket(uri, ["streamlit", ...sessionTokens])
     this.websocket.binaryType = "arraybuffer"
 
     this.setConnectionTimeout(uri)
@@ -439,7 +387,7 @@ export class WebsocketConnection {
     const localWebsocket = this.websocket
     const checkWebsocket = (): boolean => localWebsocket === this.websocket
 
-    this.websocket.onmessage = (event: MessageEvent) => {
+    this.websocket.addEventListener("message", (event: MessageEvent) => {
       if (checkWebsocket()) {
         this.handleMessage(event.data).catch(reason => {
           const err = `Failed to process a Websocket message (${reason})`
@@ -447,34 +395,34 @@ export class WebsocketConnection {
           this.stepFsm("FATAL_ERROR", err)
         })
       }
-    }
+    })
 
-    this.websocket.onopen = () => {
+    this.websocket.addEventListener("open", () => {
       if (checkWebsocket()) {
         logMessage(LOG, "WebSocket onopen")
         this.stepFsm("CONNECTION_SUCCEEDED")
       }
-    }
+    })
 
-    this.websocket.onclose = () => {
+    this.websocket.addEventListener("close", () => {
       if (checkWebsocket()) {
         logWarning(LOG, "WebSocket onclose")
         this.closeConnection()
         this.stepFsm("CONNECTION_CLOSED")
       }
-    }
+    })
 
-    this.websocket.onerror = () => {
+    this.websocket.addEventListener("error", () => {
       if (checkWebsocket()) {
         logError(LOG, "WebSocket onerror")
         this.closeConnection()
         this.stepFsm("CONNECTION_ERROR")
       }
-    }
+    })
   }
 
   private setConnectionTimeout(uri: string): void {
-    if (this.wsConnectionTimeoutId != null) {
+    if (notNullOrUndefined(this.wsConnectionTimeoutId)) {
       // This should never happen. We set the timeout ID to null in both FSM
       // nodes that lead to this one.
       throw new Error("WS timeout is already set")
@@ -487,13 +435,13 @@ export class WebsocketConnection {
         return
       }
 
-      if (this.wsConnectionTimeoutId == null) {
+      if (isNullOrUndefined(this.wsConnectionTimeoutId)) {
         // Sometimes the clearTimeout doesn't work. No idea why :-/
         logWarning(LOG, "Timeout fired after cancellation")
         return
       }
 
-      if (this.websocket == null) {
+      if (isNullOrUndefined(this.websocket)) {
         // This should never happen! The only place we call
         // setConnectionTimeout() should be immediately before setting
         // this.websocket.
@@ -523,7 +471,7 @@ export class WebsocketConnection {
       this.websocket = undefined
     }
 
-    if (this.wsConnectionTimeoutId != null) {
+    if (notNullOrUndefined(this.wsConnectionTimeoutId)) {
       logMessage(LOG, `Clearing WS timeout ${this.wsConnectionTimeoutId}`)
       window.clearTimeout(this.wsConnectionTimeoutId)
       this.wsConnectionTimeoutId = undefined
@@ -594,153 +542,12 @@ export class WebsocketConnection {
   }
 }
 
-export const StyledBashCode = styled.code({
+export const StyledBashCode = styled.code(({ theme }) => ({
+  fontFamily: theme.genericFonts.codeFont,
+  fontSize: theme.fontSizes.sm,
   "&::before": {
     content: '"$"',
+    // eslint-disable-next-line streamlit-custom/no-hardcoded-theme-values
     marginRight: "1ex",
   },
-})
-
-/**
- * Attempts to connect to the URIs in uriList (in round-robin fashion) and
- * retries forever until one of the URIs responds with 'ok'.
- * Returns a promise with the index of the URI that worked.
- */
-export function doInitPings(
-  uriPartsList: BaseUriParts[],
-  minimumTimeoutMs: number,
-  maximumTimeoutMs: number,
-  retryCallback: OnRetry,
-  setAllowedOriginsResp: (resp: IAllowedMessageOriginsResponse) => void,
-  userCommandLine?: string
-): Promise<number> {
-  const resolver = new Resolver<number>()
-  let totalTries = 0
-  let uriNumber = 0
-
-  // Hoist the connect() declaration.
-  let connect = (): void => {}
-
-  const retryImmediately = (): void => {
-    uriNumber++
-    if (uriNumber >= uriPartsList.length) {
-      uriNumber = 0
-    }
-
-    connect()
-  }
-
-  const retry = (errorNode: React.ReactNode): void => {
-    // Adjust retry time by +- 20% to spread out load
-    const jitter = Math.random() * 0.4 - 0.2
-    // Exponential backoff to reduce load from health pings when experiencing
-    // persistent failure. Starts at minimumTimeoutMs.
-    const timeoutMs =
-      totalTries === 1
-        ? minimumTimeoutMs
-        : minimumTimeoutMs * 2 ** (totalTries - 1) * (1 + jitter)
-    const retryTimeout = Math.min(maximumTimeoutMs, timeoutMs)
-
-    retryCallback(totalTries, errorNode, retryTimeout)
-
-    window.setTimeout(retryImmediately, retryTimeout)
-  }
-
-  const retryWhenTheresNoResponse = (): void => {
-    const uriParts = uriPartsList[uriNumber]
-    const uri = new URL(buildHttpUri(uriParts, ""))
-
-    if (uri.hostname === "localhost") {
-      const commandLine = userCommandLine || "streamlit run yourscript.py"
-      retry(
-        <Fragment>
-          <p>
-            Is Streamlit still running? If you accidentally stopped Streamlit,
-            just restart it in your terminal:
-          </p>
-          <pre>
-            <StyledBashCode>{commandLine}</StyledBashCode>
-          </pre>
-        </Fragment>
-      )
-    } else {
-      retry("Connection failed with status 0.")
-    }
-  }
-
-  const retryWhenIsForbidden = (): void => {
-    retry(
-      <Fragment>
-        <p>Cannot connect to Streamlit (HTTP status: 403).</p>
-        <p>
-          If you are trying to access a Streamlit app running on another
-          server, this could be due to the app's{" "}
-          <a href={CORS_ERROR_MESSAGE_DOCUMENTATION_LINK}>CORS</a> settings.
-        </p>
-      </Fragment>
-    )
-  }
-
-  connect = () => {
-    const uriParts = uriPartsList[uriNumber]
-    const healthzUri = buildHttpUri(uriParts, SERVER_PING_PATH)
-    const allowedOriginsUri = buildHttpUri(uriParts, ALLOWED_ORIGINS_PATH)
-
-    logMessage(LOG, `Attempting to connect to ${healthzUri}.`)
-
-    if (uriNumber === 0) {
-      totalTries++
-    }
-
-    // We fire off requests to the server's healthz and allowed message origins
-    // endpoints in parallel to avoid having to wait on too many sequential
-    // round trip network requests before we can try to establish a WebSocket
-    // connection. Technically, it would have been possible to implement a
-    // single "get server health and origins whitelist" endpoint, but we chose
-    // not to do so as it's semantically cleaner to not give the healthcheck
-    // endpoint additional responsibilities.
-    Promise.all([
-      axios.get(healthzUri, { timeout: PING_TIMEOUT_MS }),
-      axios.get(allowedOriginsUri, { timeout: PING_TIMEOUT_MS }),
-    ])
-      .then(([_, originsResp]) => {
-        setAllowedOriginsResp(originsResp.data)
-        resolver.resolve(uriNumber)
-      })
-      .catch(error => {
-        if (error.code === "ECONNABORTED") {
-          return retry("Connection timed out.")
-        }
-
-        if (error.response) {
-          // The request was made and the server responded with a status code
-          // that falls out of the range of 2xx
-
-          const { data, status } = error.response
-
-          if (status === /* NO RESPONSE */ 0) {
-            return retryWhenTheresNoResponse()
-          }
-          if (status === 403) {
-            return retryWhenIsForbidden()
-          }
-          return retry(
-            `Connection failed with status ${status}, ` +
-              `and response "${data}".`
-          )
-        }
-        if (error.request) {
-          // The request was made but no response was received
-          // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-          // http.ClientRequest in node.js
-          return retryWhenTheresNoResponse()
-        }
-        // Something happened in setting up the request that triggered an Error
-        return retry(error.message)
-      })
-  }
-
-  connect()
-
-  return resolver.promise
-}
+}))

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 import React, { ReactElement } from "react"
+
 import { Check } from "@emotion-icons/material-outlined"
 import { toHex } from "color2k"
 import humanizeString from "humanize-string"
@@ -24,27 +25,28 @@ import {
   BaseButton,
   BaseButtonKind,
   BaseColorPicker,
-  Modal,
-  ModalHeader,
-  ModalBody,
-  UISelectbox,
-  Icon,
-  CUSTOM_THEME_NAME,
   createTheme,
+  CUSTOM_THEME_NAME,
+  CustomThemeConfig,
   darkTheme,
-  lightTheme,
   EmotionTheme,
+  Icon,
+  LibContext,
+  lightTheme,
+  Modal,
+  ModalBody,
+  ModalHeader,
+  StreamlitMarkdown,
   ThemeConfig,
   toThemeInput,
-  LibContext,
-  CustomThemeConfig,
+  UISelectbox,
 } from "@streamlit/lib"
+import { MetricsManager } from "@streamlit/app/src/MetricsManager"
 
 import {
+  StyledBackButton,
   StyledDialogBody,
   StyledFullRow,
-  StyledBackButton,
-  StyledSmall,
 } from "./styled-components"
 
 interface ThemeOptionBuilder {
@@ -186,6 +188,7 @@ export const toMinimalToml = (
 export interface Props {
   backToSettings: (animateModal: boolean) => void
   onClose: () => void
+  metricsMgr: MetricsManager
 }
 
 const ThemeCreatorDialog = (props: Props): ReactElement => {
@@ -211,6 +214,9 @@ const ThemeCreatorDialog = (props: Props): ReactElement => {
   const config = toMinimalToml(themeInput)
 
   const copyConfig = (): void => {
+    props.metricsMgr.enqueue("menuClick", {
+      label: "copyThemeToClipboard",
+    })
     navigator.clipboard.writeText(config)
     updateCopied(true)
   }
@@ -269,17 +275,23 @@ const ThemeCreatorDialog = (props: Props): ReactElement => {
   return (
     <Modal animate={false} isOpen onClose={props.onClose}>
       <ModalHeader>
-        <StyledBackButton onClick={onClickedBack} />
+        <StyledBackButton
+          onClick={onClickedBack}
+          data-testid="stThemeCreatorBack"
+        />
         Edit active theme
       </ModalHeader>
       <ModalBody>
-        <StyledDialogBody>
+        <StyledDialogBody data-testid="stThemeCreatorDialog">
           <StyledFullRow>
-            <StyledSmall>
-              Changes made to the active theme will exist for the duration of a
-              session. To discard changes and recover the original theme,
-              refresh the page.
-            </StyledSmall>
+            <StreamlitMarkdown
+              source={`
+Changes made to the active theme will exist for the duration of a
+session. To discard changes and recover the original theme,
+refresh the page.`}
+              allowHTML={false}
+              isCaption={true}
+            />
           </StyledFullRow>
 
           <ThemeOption name="primaryColor" value={primaryColor} />
@@ -295,12 +307,16 @@ const ThemeCreatorDialog = (props: Props): ReactElement => {
           </StyledFullRow>
 
           <StyledFullRow>
-            <StyledSmall>
-              To save your changes, copy your custom theme into the clipboard
-              and paste it into the
-              <code>[theme]</code> section of your{" "}
-              <code>.streamlit/config.toml</code> file.
-            </StyledSmall>
+            <StyledFullRow>
+              <StreamlitMarkdown
+                source={`
+To save your changes, copy your custom theme into the clipboard and paste it into the
+\`[theme]\` section of your \`.streamlit/config.toml\` file.
+`}
+                allowHTML={false}
+                isCaption={true}
+              />
+            </StyledFullRow>
           </StyledFullRow>
 
           <StyledFullRow>

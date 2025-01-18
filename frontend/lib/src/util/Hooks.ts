@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,13 @@
  * limitations under the License.
  */
 
-import { MutableRefObject, useRef, useEffect, useState } from "react"
+import {
+  MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react"
 
 export const usePrevious = (value: any): any => {
   const ref = useRef()
@@ -23,22 +29,44 @@ export const usePrevious = (value: any): any => {
     ref.current = value
   }, [value])
 
+  // TODO: Update to match React best practices
+  // eslint-disable-next-line react-compiler/react-compiler
   return ref.current
 }
 
 export const useIsOverflowing = (
-  ref: MutableRefObject<HTMLElement | null>
+  ref: MutableRefObject<HTMLElement | null>,
+  expanded?: boolean
 ): boolean => {
   const { current } = ref
   const [isOverflowing, setIsOverflowing] = useState(false)
-
-  useEffect(() => {
+  const checkOverflowing = useCallback(() => {
     if (current) {
       const { scrollHeight, clientHeight } = current
 
       setIsOverflowing(scrollHeight > clientHeight)
     }
-  }, [setIsOverflowing, current, current?.clientHeight])
+  }, [current])
+
+  // We want to double check if the element is overflowing
+  // when the expanded state changes or the height of the
+  // element changes
+  useEffect(() => {
+    checkOverflowing()
+    // TODO: Update to match React best practices
+    // eslint-disable-next-line react-compiler/react-compiler
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, current?.clientHeight])
+
+  // Window resizing can also affect the overflow state
+  // so we need to check it as well
+  useEffect(() => {
+    window.addEventListener("resize", checkOverflowing)
+
+    return () => {
+      window.removeEventListener("resize", checkOverflowing)
+    }
+  }, [checkOverflowing])
 
   return isOverflowing
 }

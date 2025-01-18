@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,11 @@
 
 """Form unit tests."""
 
+from __future__ import annotations
+
 from unittest.mock import MagicMock, patch
+
+from parameterized import parameterized
 
 import streamlit as st
 from streamlit.errors import StreamlitAPIException
@@ -179,7 +183,8 @@ class FormMarshallingTest(DeltaGeneratorTestCase):
         form_proto = self.get_delta_from_queue(0).add_block
         self.assertEqual("foo", form_proto.form.form_id)
         self.assertEqual(True, form_proto.form.clear_on_submit)
-
+        self.assertEqual(True, form_proto.form.enter_to_submit)
+        self.assertEqual(True, form_proto.form.border)
         self.clear_queue()
 
         # Test with clear_on_submit=False
@@ -190,6 +195,28 @@ class FormMarshallingTest(DeltaGeneratorTestCase):
         form_proto = self.get_delta_from_queue(0).add_block
         self.assertEqual("bar", form_proto.form.form_id)
         self.assertEqual(False, form_proto.form.clear_on_submit)
+
+    def test_form_enter_to_submit(self):
+        """Test that a form can be created with enter_to_submit=False."""
+
+        # Test with enter_to_submit=False
+        with st.form(key="foo", enter_to_submit=False):
+            pass
+
+        self.assertEqual(len(self.get_all_deltas_from_queue()), 1)
+        form_proto = self.get_delta_from_queue(0).add_block
+        self.assertEqual(False, form_proto.form.enter_to_submit)
+
+    def test_form_without_border(self):
+        """Test that a form can be created without a border."""
+
+        # Test with clear_on_submit=True
+        with st.form(key="foo", clear_on_submit=True, border=False):
+            pass
+
+        self.assertEqual(len(self.get_all_deltas_from_queue()), 1)
+        form_proto = self.get_delta_from_queue(0).add_block
+        self.assertEqual(False, form_proto.form.border)
 
     def test_multiple_forms_same_key(self):
         """Multiple forms with the same key are not allowed."""
@@ -291,14 +318,33 @@ class FormSubmitButtonTest(DeltaGeneratorTestCase):
         last_delta = self.get_delta_from_queue()
         self.assertEqual("secondary", last_delta.new_element.button.type)
 
-    def test_submit_button_primary_type(self):
-        """Test that a submit button can be called with type="primary"."""
+    @parameterized.expand(["primary", "secondary", "tertiary"])
+    def test_submit_button_types(self, type):
+        """Test that a submit button can be called with different types."""
 
         form = st.form("foo")
-        form.form_submit_button(type="primary")
+        form.form_submit_button(type=type)
 
         last_delta = self.get_delta_from_queue()
-        self.assertEqual("primary", last_delta.new_element.button.type)
+        self.assertEqual(type, last_delta.new_element.button.type)
+
+    def test_submit_button_emoji_icon(self):
+        """Test that a submit button can be called with an emoji icon."""
+
+        form = st.form("foo")
+        form.form_submit_button(icon="⚡")
+
+        last_delta = self.get_delta_from_queue()
+        self.assertEqual("⚡", last_delta.new_element.button.icon)
+
+    def test_submit_button_material_icon(self):
+        """Test that a submit button can be called with a Material icon."""
+
+        form = st.form("foo")
+        form.form_submit_button(icon=":material/thumb_up:")
+
+        last_delta = self.get_delta_from_queue()
+        self.assertEqual(":material/thumb_up:", last_delta.new_element.button.icon)
 
     def test_submit_button_can_use_container_width_by_default(self):
         """Test that a submit button can be called with use_container_width=True."""
@@ -331,6 +377,21 @@ class FormSubmitButtonTest(DeltaGeneratorTestCase):
         with st.form("form"):
             submitted = st.form_submit_button("Submit")
             self.assertEqual(submitted, True)
+
+    def test_shows_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+
+        @st.cache_data
+        def cached_function():
+            with st.form("form"):
+                st.form_submit_button("Submit")
+
+        cached_function()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)
 
 
 @patch("streamlit.runtime.Runtime.exists", MagicMock(return_value=True))

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
  */
 
 import React, { ReactElement, ReactNode, useCallback, useContext } from "react"
-import { StyledBody, StyledAction } from "baseui/card"
+
+import { StyledAction, StyledBody } from "baseui/card"
 
 import { BaseButton, BaseButtonKind, GitInfo, IGitInfo } from "@streamlit/lib"
-import { SegmentMetricsManager } from "@streamlit/app/src/SegmentMetricsManager"
+import { MetricsManager } from "@streamlit/app/src/MetricsManager"
 import {
   DialogType,
   PlainEventHandler,
@@ -26,11 +27,14 @@ import {
 import { AppContext } from "@streamlit/app/src/components/AppContext"
 import StreamlitLogo from "@streamlit/app/src/assets/svg/logo.svg"
 import Rocket from "@streamlit/app/src/assets/svg/rocket.svg"
+import Snowflake from "@streamlit/app/src/assets/svg/snowflake.svg"
 import {
+  DEPLOY_URL,
+  SNOWFLAKE_LEARN_MORE_URL,
+  SNOWFLAKE_TRIAL_URL,
+  STREAMLIT_CLOUD_URL,
   STREAMLIT_COMMUNITY_CLOUD_DOCS_URL,
   STREAMLIT_DEPLOY_TUTORIAL_URL,
-  DEPLOY_URL,
-  STREAMLIT_CLOUD_URL,
 } from "@streamlit/app/src/urls"
 import {
   DetachedHead,
@@ -42,9 +46,10 @@ import Modal from "./DeployModal"
 import Card from "./DeployCard"
 import ListElement from "./DeployListElement"
 import {
-  StyledSubheader,
   StyledActionsWrapper,
   StyledCardContainer,
+  StyledHeader,
+  StyledSubheader,
 } from "./styled-components"
 
 const { GitStates } = GitInfo
@@ -59,9 +64,9 @@ const getDeployAppUrl = (gitInfo: IGitInfo | null): string => {
     // E.g.: https://share.streamlit.io/deploy?repository=melon&branch=develop&mainModule=streamlit_app.py
     const deployUrl = new URL(DEPLOY_URL)
 
-    deployUrl.searchParams.set("repository", gitInfo.repository || "")
-    deployUrl.searchParams.set("branch", gitInfo.branch || "")
-    deployUrl.searchParams.set("mainModule", gitInfo.module || "")
+    deployUrl.searchParams.set("repository", gitInfo.repository ?? "")
+    deployUrl.searchParams.set("branch", gitInfo.branch ?? "")
+    deployUrl.searchParams.set("mainModule", gitInfo.module ?? "")
     return deployUrl.toString()
   }
   // If not in git repo, direct them to the Streamlit Cloud page.
@@ -77,10 +82,12 @@ export interface DeployDialogProps {
     onContinue?: () => void
   ) => void
   isDeployErrorModalOpen: boolean
-  metricsMgr: SegmentMetricsManager
+  metricsMgr: MetricsManager
 }
 
-export function DeployDialog(props: DeployDialogProps): ReactElement {
+export function DeployDialog(
+  props: Readonly<DeployDialogProps>
+): ReactElement {
   // Get latest git info from AppContext:
   const { gitInfo } = useContext(AppContext)
   const { onClose, metricsMgr } = props
@@ -143,22 +150,24 @@ export function DeployDialog(props: DeployDialogProps): ReactElement {
     <Modal onClose={onClose}>
       <StyledCardContainer>
         <Card>
-          <StyledBody>
-            <img src={StreamlitLogo} alt={"Streamlit Logo"} />
-            <StyledSubheader>Streamlit Community Cloud</StyledSubheader>
-            <ListElement extraSpacing={true}>For the community</ListElement>
-            <ListElement extraSpacing={true}>
-              Deploy unlimited public apps for free
-            </ListElement>
-            <ListElement extraSpacing={true}>
-              Apps are discoverable through the Streamlit gallery and search
-              engines
+          <StyledBody style={{ flexGrow: 1 }}>
+            <img
+              src={StreamlitLogo}
+              alt={"Streamlit Logo"}
+              data-testid={"stDeployDialogCommunityCloudIcon"}
+            />
+            <StyledHeader>Streamlit Community Cloud</StyledHeader>
+            <StyledSubheader>For community, always free</StyledSubheader>
+            <ListElement>For personal hobbies and learning</ListElement>
+            <ListElement>Deploy unlimited public apps</ListElement>
+            <ListElement>
+              Explore and learn from Streamlit’s community and popular apps
             </ListElement>
           </StyledBody>
           <StyledAction>
             <StyledActionsWrapper>
               <BaseButton
-                kind={BaseButtonKind.SECONDARY}
+                kind={BaseButtonKind.PRIMARY}
                 onClick={onClickDeployApp}
               >
                 Deploy now
@@ -172,21 +181,73 @@ export function DeployDialog(props: DeployDialogProps): ReactElement {
                 }}
                 kind={BaseButtonKind.MINIMAL}
               >
-                Read more
+                Learn more
               </BaseButton>
             </StyledActionsWrapper>
           </StyledAction>
         </Card>
         <Card>
-          <StyledBody>
-            <img src={Rocket} alt={"Rocket"} />
-            <StyledSubheader>Custom deployment</StyledSubheader>
-            <ListElement>For companies</ListElement>
+          <StyledBody style={{ flexGrow: 1 }}>
+            <img
+              src={Snowflake}
+              alt={"Snowflake"}
+              data-testid={"stDeployDialogSnowflakeDeploymentIcon"}
+            />
+            <StyledHeader>Snowflake</StyledHeader>
+            <StyledSubheader>For enterprise</StyledSubheader>
             <ListElement>
-              Deploy on your own hardware or in the cloud, with Docker,
-              Kubernetes, etc
+              Enterprise-level security, support, and fully managed
+              infrastructure
             </ListElement>
-            <ListElement>Set up your own authentication</ListElement>
+            <ListElement>
+              Deploy unlimited private apps with role-based sharing
+            </ListElement>
+            <ListElement>
+              Integrate with Snowflake’s full data stack
+            </ListElement>
+          </StyledBody>
+          <StyledAction>
+            <StyledActionsWrapper>
+              <BaseButton
+                kind={BaseButtonKind.SECONDARY}
+                onClick={() => {
+                  metricsMgr.enqueue("menuClick", {
+                    label: "startTrialInDeployDialog",
+                  })
+                  openUrl(SNOWFLAKE_TRIAL_URL)
+                }}
+              >
+                Start trial
+              </BaseButton>
+              <BaseButton
+                onClick={() => {
+                  metricsMgr.enqueue("menuClick", {
+                    label: "learnMoreSnowflakeInDeployDialog",
+                  })
+                  openUrl(SNOWFLAKE_LEARN_MORE_URL)
+                }}
+                kind={BaseButtonKind.MINIMAL}
+              >
+                Learn more
+              </BaseButton>
+            </StyledActionsWrapper>
+          </StyledAction>
+        </Card>
+        <Card>
+          <StyledBody style={{ flexGrow: 2 }}>
+            <img
+              src={Rocket}
+              alt={"Rocket"}
+              data-testid={"stDeployDialogCustomDeploymentIcon"}
+            />
+            <StyledHeader>Other platforms</StyledHeader>
+            <StyledSubheader>For custom deployment </StyledSubheader>
+            <ListElement>
+              Deploy on your own hardware or cloud service
+            </ListElement>
+            <ListElement>
+              Set up and maintain your own authentication, resources, and costs
+            </ListElement>
           </StyledBody>
           <StyledAction>
             <StyledActionsWrapper>
@@ -199,7 +260,7 @@ export function DeployDialog(props: DeployDialogProps): ReactElement {
                 }}
                 kind={BaseButtonKind.MINIMAL}
               >
-                Read more
+                Learn more
               </BaseButton>
             </StyledActionsWrapper>
           </StyledAction>

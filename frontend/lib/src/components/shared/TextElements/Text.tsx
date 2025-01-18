@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,6 @@ export const Small = styled.small<TextProps>(({ kind, theme }) => {
   return {
     color: kind === Kind.DANGER ? danger : fadedText60,
     fontSize: theme.fontSizes.sm,
-    lineHeight: "1.25",
+    lineHeight: theme.lineHeights.tight,
   }
 })

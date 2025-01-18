@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,105 +15,89 @@
  */
 
 import React, { ReactElement, useEffect } from "react"
+
 import { select } from "d3"
-import { graphviz } from "d3-graphviz"
+import { Engine, graphviz } from "d3-graphviz"
+
 import { logError } from "@streamlit/lib/src/util/log"
-import withFullScreenWrapper from "@streamlit/lib/src/hocs/withFullScreenWrapper"
 import { GraphVizChart as GraphVizChartProto } from "@streamlit/lib/src/proto"
+import Toolbar, {
+  StyledToolbarElementContainer,
+} from "@streamlit/lib/src/components/shared/Toolbar"
+import { ElementFullscreenContext } from "@streamlit/lib/src/components/shared/ElementFullscreen/ElementFullscreenContext"
+import { useRequiredContext } from "@streamlit/lib/src/hooks/useRequiredContext"
+import { withFullScreenWrapper } from "@streamlit/lib/src/components/shared/FullScreenWrapper"
+
 import { StyledGraphVizChart } from "./styled-components"
 
 export interface GraphVizChartProps {
-  width: number
   element: GraphVizChartProto
-  height?: number
+  width: number
+  disableFullscreenMode?: boolean
 }
 
-interface Dimensions {
-  chartWidth: number
-  chartHeight: number
-}
-
-// Use d3Graphviz in a dummy expression so the library actually gets loaded.
-// This way it registers itself in d3 as a plugin at this point.
-const dummyGraphviz = graphviz
-dummyGraphviz // eslint-disable-line @typescript-eslint/no-unused-expressions
-
-export function GraphVizChart({
-  width: propWidth,
+function GraphVizChart({
   element,
-  height: propHeight,
-}: GraphVizChartProps): ReactElement {
-  const chartId = `graphviz-chart-${element.elementId}`
+  disableFullscreenMode,
+}: Readonly<GraphVizChartProps>): ReactElement {
+  const chartId = `st-graphviz-chart-${element.elementId}`
 
-  let originalHeight = 0
-  let originalWidth = 0
+  const {
+    expanded: isFullScreen,
+    width,
+    height,
+    expand,
+    collapse,
+  } = useRequiredContext(ElementFullscreenContext)
 
-  const getChartData = (): string => {
-    return element.spec
-  }
-
-  const getChartDimensions = (): Dimensions => {
-    let chartWidth = originalWidth
-    let chartHeight = originalHeight
-
-    if (propHeight) {
-      // fullscreen
-      chartWidth = propWidth
-      chartHeight = propHeight
-    } else if (element.useContainerWidth) {
-      chartWidth = propWidth
-    }
-    return { chartWidth, chartHeight }
-  }
-
-  const updateChart = (): void => {
+  useEffect(() => {
     try {
-      // Layout and render the graph
-      const graph = graphviz(`#${chartId}`)
+      graphviz(`#${chartId}`)
         .zoom(false)
         .fit(true)
         .scale(1)
-        .renderDot(getChartData())
-        .on("end", () => {
-          const node = select(`#${chartId} > svg`).node() as SVGGraphicsElement
-          if (node) {
-            originalHeight = node.getBBox().height
-            originalWidth = node.getBBox().width
-          }
-        })
+        .engine(element.engine as Engine)
+        .renderDot(element.spec)
 
-      const { chartHeight, chartWidth } = getChartDimensions()
-      if (chartHeight > 0) {
-        // Override or reset the graph height
-        graph.height(chartHeight)
-      }
-      if (chartWidth > 0) {
-        // Override or reset the graph width
-        graph.width(chartWidth)
+      if (isFullScreen || element.useContainerWidth) {
+        const node = select(`#${chartId} > svg`).node() as SVGGraphicsElement
+        // We explicitly remove width and height to let CSS and the SVG viewBox
+        // define its dimensions
+        node.removeAttribute("width")
+        node.removeAttribute("height")
       }
     } catch (error) {
       logError(error)
     }
-  }
-
-  useEffect(() => {
-    updateChart()
-  })
-
-  const elementDimensions = getChartDimensions()
-  const width: number = elementDimensions.chartWidth
-    ? elementDimensions.chartWidth
-    : propWidth
-  const height: number | undefined = elementDimensions.chartHeight
-    ? elementDimensions.chartHeight
-    : propHeight
+  }, [
+    chartId,
+    element.engine,
+    element.spec,
+    element.useContainerWidth,
+    isFullScreen,
+  ])
 
   return (
-    <StyledGraphVizChart
-      className="graphviz stGraphVizChart"
-      id={chartId}
-      style={{ width, height }}
-    />
+    <StyledToolbarElementContainer
+      width={width}
+      height={height}
+      useContainerWidth={isFullScreen || element.useContainerWidth}
+    >
+      <Toolbar
+        target={StyledToolbarElementContainer}
+        isFullScreen={isFullScreen}
+        onExpand={expand}
+        onCollapse={collapse}
+        disableFullscreenMode={disableFullscreenMode}
+      ></Toolbar>
+      <StyledGraphVizChart
+        className="stGraphVizChart"
+        data-testid="stGraphVizChart"
+        id={chartId}
+        isFullScreen={isFullScreen}
+        useContainerWidth={element.useContainerWidth}
+      />
+    </StyledToolbarElementContainer>
   )
 }
 

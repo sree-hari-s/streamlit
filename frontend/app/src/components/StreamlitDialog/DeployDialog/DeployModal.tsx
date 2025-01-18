@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,45 @@
  * limitations under the License.
  */
 
-import React, { ReactElement } from "react"
-import { Modal, ModalHeader, ModalBody } from "@streamlit/lib"
+import React, { ReactElement, ReactNode } from "react"
+
+import { ModalBody as UIModalBody } from "baseui/modal"
 import { CloseSource } from "baseui/modal/types"
+import { useTheme } from "@emotion/react"
+
+import { EmotionTheme, Modal, ModalHeader } from "@streamlit/lib"
 
 interface IDeployModalProps {
   children: React.ReactNode
   onClose: (a: { closeSource?: CloseSource }) => unknown
+}
+
+export interface ModalBodyProps {
+  children: ReactNode
+}
+
+function ModalBody({ children }: Readonly<ModalBodyProps>): ReactElement {
+  const { colors, fontSizes, spacing }: EmotionTheme = useTheme()
+
+  return (
+    <UIModalBody
+      style={{
+        marginTop: spacing.none,
+        marginLeft: spacing.none,
+        marginRight: spacing.none,
+        marginBottom: spacing.none,
+        paddingTop: spacing.md,
+        paddingRight: spacing.none,
+        paddingBottom: spacing.none,
+        paddingLeft: spacing.none,
+        color: colors.bodyText,
+        fontSize: fontSizes.md,
+        overflowY: "auto",
+      }}
+    >
+      {children}
+    </UIModalBody>
+  )
 }
 
 function DeployModal(
@@ -28,19 +60,8 @@ function DeployModal(
 ): ReactElement {
   const { children, onClose } = props
   return (
-    <Modal
-      isOpen={true}
-      closeable={true}
-      onClose={onClose}
-      overrides={{
-        Dialog: {
-          style: {
-            width: "860px",
-          },
-        },
-      }}
-    >
-      <ModalHeader>Deploy this app</ModalHeader>
+    <Modal isOpen={true} closeable={true} onClose={onClose} size="auto">
+      <ModalHeader>Deploy this app using...</ModalHeader>
       <ModalBody>{children}</ModalBody>
     </Modal>
   )

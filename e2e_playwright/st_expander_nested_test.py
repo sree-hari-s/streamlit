@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from playwright.sync_api import Page, expect
+from playwright.sync_api import Page
+
+from e2e_playwright.shared.app_utils import expect_exception
 
 
 def test_nested_expanders(app: Page):
     """Test that st.expander may not be nested inside other expanders."""
-    exception_message = app.locator(".stException .message")
-
-    expect(exception_message).to_have_text(
-        "StreamlitAPIException: Expanders may not be nested inside other expanders."
+    expect_exception(
+        app,
+        "StreamlitAPIException: Expanders may not be nested inside other expanders.",
     )

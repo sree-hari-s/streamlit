@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,60 +15,28 @@
  */
 
 /* eslint-disable import/no-extraneous-dependencies */
+import React, { FC, PropsWithChildren, ReactElement } from "react"
+
+import { Vector } from "apache-arrow"
 import {
   render as reactTestingLibraryRender,
   RenderOptions,
   RenderResult,
 } from "@testing-library/react"
-import {
-  mount as enzymeMount,
-  MountRendererProps,
-  ReactWrapper,
-  shallow as enzymeShallow,
-  ShallowRendererProps,
-  ShallowWrapper,
-} from "enzyme"
+
 /* eslint-enable */
-import React, { Component, FC, ReactElement } from "react"
 import ThemeProvider from "./components/core/ThemeProvider"
-import { baseTheme, EmotionTheme } from "./theme"
+import { baseTheme } from "./theme"
 import { mockTheme } from "./mocks/mockTheme"
 import { LibContext, LibContextProps } from "./components/core/LibContext"
+import { WindowDimensionsProvider } from "./components/shared/WindowDimensions/Provider"
 
-export function mount<C extends Component, P = C["props"], S = C["state"]>(
-  node: ReactElement<P>,
-  options?: MountRendererProps,
-  theme?: EmotionTheme
-): ReactWrapper<P, S, C> {
-  const opts: MountRendererProps = {
-    ...(options || {}),
-    wrappingComponent: ThemeProvider,
-    wrappingComponentProps: {
-      theme: theme || mockTheme.emotion,
-    },
-  }
-
-  return enzymeMount(node, opts)
-}
-
-export function shallow<C extends Component, P = C["props"], S = C["state"]>(
-  node: ReactElement<P>,
-  options?: ShallowRendererProps,
-  theme?: EmotionTheme
-): ShallowWrapper<P, S, C> {
-  const opts: ShallowRendererProps = {
-    ...(options || {}),
-    wrappingComponent: ThemeProvider,
-    wrappingComponentProps: {
-      theme: theme || mockTheme.emotion,
-    },
-  }
-
-  return enzymeShallow(node, opts)
-}
-
-const RenderWrapper: FC = ({ children }) => {
-  return <ThemeProvider theme={mockTheme.emotion}>{children}</ThemeProvider>
+export const TestAppWrapper: FC<PropsWithChildren> = ({ children }) => {
+  return (
+    <ThemeProvider theme={mockTheme.emotion}>
+      <WindowDimensionsProvider>{children}</WindowDimensionsProvider>
+    </ThemeProvider>
+  )
 }
 
 /**
@@ -80,8 +48,11 @@ export function render(
   options?: Omit<RenderOptions, "queries">
 ): RenderResult {
   return reactTestingLibraryRender(ui, {
-    wrapper: RenderWrapper,
+    wrapper: ({ children }) => <TestAppWrapper>{children}</TestAppWrapper>,
     ...options,
+    // TODO: Remove this to have RTL run on React 18
+    // react-18-upgrade
+    legacyRoot: true,
   })
 }
 
@@ -93,7 +64,7 @@ export function mockWindowLocation(hostname: string): void {
 
   // @ts-expect-error
   window.location = {
-    assign: jest.fn(),
+    assign: vi.fn(),
     hostname: hostname,
   }
 }
@@ -108,25 +79,43 @@ export const customRenderLibContext = (
 ): RenderResult => {
   const defaultLibContextProps = {
     isFullScreen: false,
-    setFullScreen: jest.fn(),
-    addScriptFinishedHandler: jest.fn(),
-    removeScriptFinishedHandler: jest.fn(),
+    setFullScreen: vi.fn(),
+    addScriptFinishedHandler: vi.fn(),
+    removeScriptFinishedHandler: vi.fn(),
     activeTheme: baseTheme,
-    setTheme: jest.fn(),
+    setTheme: vi.fn(),
     availableThemes: [],
-    addThemes: jest.fn(),
-    hideFullScreenButtons: false,
+    addThemes: vi.fn(),
+    onPageChange: vi.fn(),
+    currentPageScriptHash: "",
+    libConfig: {},
+    fragmentIdsThisRun: [],
+    locale: "en-US",
   }
 
   return reactTestingLibraryRender(component, {
     wrapper: ({ children }) => (
       <ThemeProvider theme={baseTheme.emotion}>
-        <LibContext.Provider
-          value={{ ...defaultLibContextProps, ...overrideLibContextProps }}
-        >
-          {children}
-        </LibContext.Provider>
+        <WindowDimensionsProvider>
+          <LibContext.Provider
+            value={{ ...defaultLibContextProps, ...overrideLibContextProps }}
+          >
+            {children}
+          </LibContext.Provider>
+        </WindowDimensionsProvider>
       </ThemeProvider>
     ),
   })
+}
+
+export function arrayFromVector(vector: any): any {
+  if (Array.isArray(vector)) {
+    return vector.map(arrayFromVector)
+  }
+
+  if (vector instanceof Vector) {
+    return Array.from(vector)
+  }
+
+  return vector
 }

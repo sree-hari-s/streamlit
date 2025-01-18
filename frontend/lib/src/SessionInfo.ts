@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,7 @@ import {
   NewSession,
   UserInfo,
 } from "./proto"
-
-import { hashString } from "./util/utils"
+import { hashString, notNullOrUndefined } from "./util/utils"
 
 /**
  * SessionInfo properties. These don't change during the lifetime of a session.
@@ -35,15 +34,8 @@ export interface Props {
   readonly installationId: string
   readonly installationIdV3: string
   readonly maxCachedMessageAge: number
-  readonly commandLine: string
-
-  /**
-   * The user-supplied mapbox token. By default, this will be the empty string,
-   * which indicates that we should fetch Streamlit's mapbox token and use
-   * that instead. Do not use this value directly; use `MapboxToken.get()`
-   * instead.
-   */
-  readonly userMapboxToken: string
+  readonly commandLine?: string // Unused, but kept around for compatibility
+  readonly isHello: boolean
 }
 
 export class SessionInfo {
@@ -74,8 +66,10 @@ export class SessionInfo {
    * previous props to `SessionInfo.last`.
    */
   public setCurrent(props?: Props): void {
-    this._last = this._current != null ? { ...this._current } : undefined
-    this._current = props != null ? { ...props } : undefined
+    this._last = notNullOrUndefined(this._current)
+      ? { ...this._current }
+      : undefined
+    this._current = notNullOrUndefined(props) ? { ...props } : undefined
   }
 
   /** Clear `SessionInfo.current` and copy its previous props to `SessionInfo.last`. */
@@ -85,14 +79,12 @@ export class SessionInfo {
 
   /** True if `SessionInfo.current` exists. */
   public get isSet(): boolean {
-    return this._current != null
+    return notNullOrUndefined(this._current)
   }
 
   /** True if `SessionInfo.current` refers to a "streamlit hello" session. */
   public get isHello(): boolean {
-    return (
-      this._current != null && this._current.commandLine === "streamlit hello"
-    )
+    return notNullOrUndefined(this._current) && this._current.isHello
   }
 
   /** Create SessionInfo Props from the relevant bits of an initialize message. */
@@ -109,8 +101,7 @@ export class SessionInfo {
       installationId: userInfo.installationId,
       installationIdV3: userInfo.installationIdV3,
       maxCachedMessageAge: config.maxCachedMessageAge,
-      commandLine: initialize.commandLine,
-      userMapboxToken: config.mapboxToken,
+      isHello: initialize.isHello,
     }
   }
 }

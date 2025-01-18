@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,28 +13,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { merge } from "lodash"
+import React from "react"
 
-import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
-import { Arrow as ArrowProto } from "@streamlit/lib/src/proto"
-import {
-  notNullOrUndefined,
-  isNullOrUndefined,
-} from "@streamlit/lib/src/util/utils"
-import { logWarning, logError } from "@streamlit/lib/src/util/log"
+import { useTheme } from "@emotion/react"
+import isArray from "lodash/isArray"
+import isEmpty from "lodash/isEmpty"
+import merge from "lodash/merge"
+import mergeWith from "lodash/mergeWith"
 
 import {
   getColumnTypeFromArrow,
-  getAllColumnsFromArrow,
-  getEmptyIndexColumn,
+  initAllColumnsFromArrow,
+  initEmptyIndexColumn,
 } from "@streamlit/lib/src/components/widgets/DataFrame/arrowUtils"
 import {
   BaseColumn,
   BaseColumnProps,
-  ObjectColumn,
-  ColumnTypes,
   ColumnCreator,
+  ColumnTypes,
+  ObjectColumn,
 } from "@streamlit/lib/src/components/widgets/DataFrame/columns"
+import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
+import { Arrow as ArrowProto } from "@streamlit/lib/src/proto"
+import { EmotionTheme } from "@streamlit/lib/src/theme"
+import { logError, logWarning } from "@streamlit/lib/src/util/log"
+import {
+  isNullOrUndefined,
+  notNullOrUndefined,
+} from "@streamlit/lib/src/util/utils"
 
 // Using this ID for column config will apply the config to all index columns
 export const INDEX_IDENTIFIER = "_index"
@@ -63,6 +69,7 @@ export interface ColumnConfigProps {
   required?: boolean
   default?: number | string | boolean
   alignment?: "left" | "center" | "right"
+  pinned?: boolean
   // uses snake_case to match the property names in the backend:
   type_config?: Record<string, unknown>
 }
@@ -89,6 +96,24 @@ function parseWidthConfig(
 }
 
 /**
+ * Custom merge function to merge column config objects.
+ */
+const mergeColumnConfig = (
+  target: ColumnConfigProps,
+  source: ColumnConfigProps
+): ColumnConfigProps => {
+  // Don't merge arrays, just overwrite the old value with the new value
+  const customMergeArrays = (objValue: object, srcValue: object): any => {
+    // If the new value is an array, just return it as is (overwriting the old)
+    if (isArray(srcValue)) {
+      return srcValue
+    }
+  }
+
+  return mergeWith(target, source, customMergeArrays)
+}
+
+/**
  * Apply the user-defined column configuration if supplied.
  *
  * @param columnProps - The column properties to apply the config to.
@@ -105,32 +130,56 @@ export function applyColumnConfig(
     return columnProps
   }
 
-  let columnConfig
+  let columnConfig: ColumnConfigProps = {}
+
+  // Merge all possible ways to provide column config for a specific column:
+  // The order / priority of how this is merged is important!
+
+  // 1. Config is configured for the index column (or all index columns for multi-index)
+  if (columnProps.isIndex && columnConfigMapping.has(INDEX_IDENTIFIER)) {
+    columnConfig = mergeColumnConfig(
+      columnConfig,
+      columnConfigMapping.get(INDEX_IDENTIFIER) ?? {}
+    )
+  }
+
+  // 2. Config is configured based on the column position, e.g. _pos:0 -> first column
   if (
-    columnConfigMapping.has(columnProps.name) &&
-    columnProps.name !== INDEX_IDENTIFIER // "index" is not supported as name for normal columns
-  ) {
-    // Config is configured based on the column name
-    columnConfig = columnConfigMapping.get(columnProps.name)
-  } else if (
     columnConfigMapping.has(
       `${COLUMN_POSITION_PREFIX}${columnProps.indexNumber}`
     )
   ) {
-    // Config is configured based on the column position, e.g. col:0 -> first column
-    columnConfig = columnConfigMapping.get(
-      `${COLUMN_POSITION_PREFIX}${columnProps.indexNumber}`
+    columnConfig = mergeColumnConfig(
+      columnConfig,
+      columnConfigMapping.get(
+        `${COLUMN_POSITION_PREFIX}${columnProps.indexNumber}`
+      ) ?? {}
     )
-  } else if (
-    columnProps.isIndex &&
-    columnConfigMapping.has(INDEX_IDENTIFIER)
-  ) {
-    // Config is configured for the index column (or all index columns for multi-index)
-    columnConfig = columnConfigMapping.get(INDEX_IDENTIFIER)
   }
 
-  if (!columnConfig) {
-    // No column config found for this column
+  // 3. Config is configured based on the column name
+  if (
+    columnConfigMapping.has(columnProps.name) &&
+    columnProps.name !== INDEX_IDENTIFIER // "_index" is not supported as name for normal columns
+  ) {
+    columnConfig = mergeColumnConfig(
+      columnConfig,
+      columnConfigMapping.get(columnProps.name) ?? {}
+    )
+  }
+
+  // 4. Config is configured based on the column id
+  // This is mainly used by the frontend component to apply changes to columns
+  // based on user configuration on the UI.
+  if (columnConfigMapping.has(columnProps.id)) {
+    columnConfig = mergeColumnConfig(
+      columnConfig,
+      columnConfigMapping.get(columnProps.id) ?? {}
+    )
+  }
+
+  // No column config found for this column
+  if (isEmpty(columnConfig)) {
     return columnProps
   }
 
@@ -143,6 +192,7 @@ export function applyColumnConfig(
       ? !columnConfig.disabled
       : undefined,
     isHidden: columnConfig.hidden,
+    isPinned: columnConfig.pinned,
     isRequired: columnConfig.required,
     columnTypeOptions: columnConfig.type_config,
     contentAlignment: columnConfig.alignment,
@@ -152,18 +202,18 @@ export function applyColumnConfig(
 }
 
 /**
- * Extracts the user-defined column configuration from the proto message.
+ * Extracts the user-defined column configuration from the JSON config.
  *
- * @param element - The proto message of the dataframe element.
+ * @param configJson - the column config JSON from the proto.
  *
  * @returns the user-defined column configuration.
  */
-export function getColumnConfig(element: ArrowProto): Map<string, any> {
-  if (!element.columns) {
+export function getColumnConfig(configJson: string): Map<string, any> {
+  if (!configJson) {
     return new Map()
   }
   try {
-    return new Map(Object.entries(JSON.parse(element.columns)))
+    return new Map(Object.entries(JSON.parse(configJson)))
   } catch (error) {
     // This is not expected to happen, but if it does, we'll return an empty map
     // and log the error to the console.
@@ -174,6 +224,9 @@ export function getColumnConfig(element: ArrowProto): Map<string, any> {
 
 type ColumnLoaderReturn = {
   columns: BaseColumn[]
+  setColumnConfigMapping: React.Dispatch<
+    React.SetStateAction<Map<string, any>>
+  >
 }
 
 /**
@@ -209,97 +262,161 @@ export function getColumnType(column: BaseColumnProps): ColumnCreator {
  * @param element - The proto message of the dataframe element
  * @param data - The Arrow data extracted from the proto message
  * @param disabled - Whether the widget is disabled
+ * @param columnOrder - The custom column order state. This is a list of column names or column ids.
+ *        If this is empty, the columns will be ordered by their position in the Arrow table.
  *
- * @returns the columns and the cell content getter compatible with glide-data-grid.
+ * @returns the columns and the cell content getter compatible with glide-data-grid
+ * and the parsed column config mapping.
  */
 function useColumnLoader(
   element: ArrowProto,
   data: Quiver,
-  disabled: boolean
+  disabled: boolean,
+  columnOrder: string[]
 ): ColumnLoaderReturn {
-  // TODO(lukasmasuch): We might use state to store the column config as additional optimization?
-  const columnConfigMapping = getColumnConfig(element)
+  const theme: EmotionTheme = useTheme()
+
+  // Memoize the column config parsing to avoid unnecessary re-renders & re-parsing:
+  const parsedColumnConfig = React.useMemo(
+    () => getColumnConfig(element.columns),
+    [element.columns]
+  )
+
+  // Initialize state with the parsed column config:
+  // We need that to allow changing the column config state
+  // (e.g. via changes by the user in the UI)
+  const [columnConfigMapping, setColumnConfigMapping] =
+    React.useState<Map<string, any>>(parsedColumnConfig)
+
+  // Resync state whenever the parsed column config from the proto changes:
+  React.useEffect(() => {
+    setColumnConfigMapping(parsedColumnConfig)
+  }, [parsedColumnConfig])
 
   const stretchColumns: boolean =
     element.useContainerWidth ||
     (notNullOrUndefined(element.width) && element.width > 0)
 
   // Converts the columns from Arrow into columns compatible with glide-data-grid
-  let configuredColumns: BaseColumn[] = getAllColumnsFromArrow(data)
-    .map(column => {
-      // Apply column configurations
-      let updatedColumn = {
-        ...column,
-        ...applyColumnConfig(column, columnConfigMapping),
-        isStretched: stretchColumns,
-      } as BaseColumnProps
+  const columns: BaseColumn[] = React.useMemo(() => {
+    const visibleColumns = initAllColumnsFromArrow(data)
+      .map(column => {
+        // Apply column configurations
+        let updatedColumn = {
+          ...column,
+          ...applyColumnConfig(column, columnConfigMapping),
+          isStretched: stretchColumns,
+        } as BaseColumnProps
+        const ColumnType = getColumnType(updatedColumn)
 
-      const ColumnType = getColumnType(updatedColumn)
-
-      // Make sure editing is deactivated if the column is read-only, disabled,
-      // or a not editable type.
-      if (
-        element.editingMode === ArrowProto.EditingMode.READ_ONLY ||
-        disabled ||
-        ColumnType.isEditableType === false
-      ) {
-        updatedColumn = {
-          ...updatedColumn,
-          isEditable: false,
+        // Make sure editing is deactivated if the column is read-only, disabled,
+        // or a not editable type.
+        if (
+          element.editingMode === ArrowProto.EditingMode.READ_ONLY ||
+          disabled ||
+          ColumnType.isEditableType === false
+        ) {
+          updatedColumn = {
+            ...updatedColumn,
+            isEditable: false,
+          }
         }
-      }
 
-      if (
-        element.editingMode !== ArrowProto.EditingMode.READ_ONLY &&
-        updatedColumn.isEditable == true
-      ) {
-        // Set editable icon for all editable columns:
-        updatedColumn = {
-          ...updatedColumn,
-          icon: "editable",
+        if (
+          element.editingMode !== ArrowProto.EditingMode.READ_ONLY &&
+          updatedColumn.isEditable == true
+        ) {
+          // Set editable icon for all editable columns:
+          updatedColumn = {
+            ...updatedColumn,
+            icon: "editable",
+          }
+
+          // Make sure that required columns are not hidden when editing mode is dynamic:
+          if (
+            updatedColumn.isRequired &&
+            element.editingMode === ArrowProto.EditingMode.DYNAMIC
+          ) {
+            updatedColumn = {
+              ...updatedColumn,
+              isHidden: false,
+            }
+          }
         }
-      }
 
-      return ColumnType(updatedColumn)
-    })
-    .filter(column => {
-      // Filter out all columns that are hidden
-      return !column.isHidden
-    })
+        return ColumnType(updatedColumn, theme)
+      })
+      .filter(column => {
+        // Filter out all columns that are hidden
+        return !column.isHidden
+      })
 
-  // Reorder columns based on the user configuration:
-  if (element.columnOrder && element.columnOrder.length > 0) {
-    const orderedColumns: BaseColumn[] = []
+    const pinnedColumns: BaseColumn[] = []
+    const unpinnedColumns: BaseColumn[] = []
 
-    // Add all index columns to the beginning of the list:
-    configuredColumns.forEach(column => {
-      if (column.isIndex) {
-        orderedColumns.push(column)
-      }
-    })
+    if (columnOrder?.length) {
+      // The column order list can contain either column names - if configured by the user -
+      // or column ids - if configured by the frontend component.
 
-    // Reorder non-index columns based on the configured column order:
-    element.columnOrder.forEach(columnName => {
-      const column = configuredColumns.find(
-        column => column.name === columnName
-      )
-      if (column && !column.isIndex) {
-        orderedColumns.push(column)
-      }
-    })
+      // Special case: index columns not part of the column order
+      // are shown as the first columns in the table
+      visibleColumns.forEach(column => {
+        if (
+          column.isIndex &&
+          !columnOrder.includes(column.name) &&
+          !columnOrder.includes(column.id) &&
+          // Don't add the index column if it is explicitly not pinned
+          column.isPinned !== false
+        ) {
+          pinnedColumns.push(column)
+        }
+      })
 
-    configuredColumns = orderedColumns
-  }
+      // Reorder columns based on the configured column order:
+      columnOrder.forEach(columnName => {
+        const column = visibleColumns.find(
+          column => column.name === columnName || column.id === columnName
+        )
+        if (column) {
+          if (column.isPinned) {
+            pinnedColumns.push(column)
+          } else {
+            unpinnedColumns.push(column)
+          }
+        }
+      })
+    } else {
+      // If no column order is configured, we just need to split
+      // the columns into pinned and unpinned:
+      visibleColumns.forEach(column => {
+        if (column.isPinned) {
+          pinnedColumns.push(column)
+        } else {
+          unpinnedColumns.push(column)
+        }
+      })
+    }
 
-  // If all columns got filtered out, we add an empty index column
-  // to prevent errors from glide-data-grid.
-  const columns =
-    configuredColumns.length > 0
-      ? configuredColumns
-      : [ObjectColumn(getEmptyIndexColumn())]
+    const orderedColumns = [...pinnedColumns, ...unpinnedColumns]
+
+    // If all columns got filtered out, we add an empty index column
+    // to prevent errors from glide-data-grid.
+    return orderedColumns.length > 0
+      ? orderedColumns
+      : [ObjectColumn(initEmptyIndexColumn())]
+  }, [
+    data,
+    columnConfigMapping,
+    stretchColumns,
+    disabled,
+    element.editingMode,
+    columnOrder,
+    theme,
+  ])
 
   return {
     columns,
+    setColumnConfigMapping,
   }
 }
 

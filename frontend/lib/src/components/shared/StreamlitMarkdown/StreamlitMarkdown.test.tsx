@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,19 +15,23 @@
  */
 
 import React, { ReactElement } from "react"
-import "@testing-library/jest-dom"
+
 import ReactMarkdown from "react-markdown"
-import { screen, cleanup } from "@testing-library/react"
+// eslint-disable-next-line testing-library/no-manual-cleanup
+import { cleanup, screen } from "@testing-library/react"
+import { transparentize } from "color2k"
 
 import { render } from "@streamlit/lib/src/test_util"
 import IsSidebarContext from "@streamlit/lib/src/components/core/IsSidebarContext"
 import { colors } from "@streamlit/lib/src/theme/primitives/colors"
+import IsDialogContext from "@streamlit/lib/src/components/core/IsDialogContext"
 
 import StreamlitMarkdown, {
-  LinkWithTargetBlank,
   createAnchorFromText,
   CustomCodeTag,
   CustomCodeTagProps,
+  CustomPreTag,
+  LinkWithTargetBlank,
 } from "./StreamlitMarkdown"
 
 // Fixture Generator
@@ -106,14 +110,28 @@ describe("linkReference", () => {
 })
 
 describe("StreamlitMarkdown", () => {
-  it("renders header anchors when isSidebar is false", () => {
+  it("renders header anchors when isInSidebar is false", () => {
     const source = "# header"
     render(
       <IsSidebarContext.Provider value={false}>
         <StreamlitMarkdown source={source} allowHTML={false} />
       </IsSidebarContext.Provider>
     )
-    expect(screen.getByTestId("StyledLinkIconContainer")).toBeInTheDocument()
+    expect(
+      screen.getByTestId("stHeadingWithActionElements")
+    ).toBeInTheDocument()
+  })
+
+  it("renders header anchors when isInDialog is false", () => {
+    const source = "# header"
+    render(
+      <IsDialogContext.Provider value={false}>
+        <StreamlitMarkdown source={source} allowHTML={false} />
+      </IsDialogContext.Provider>
+    )
+    expect(
+      screen.getByTestId("stHeadingWithActionElements")
+    ).toBeInTheDocument()
   })
 
   it("passes props properly", () => {
@@ -127,7 +145,7 @@ describe("StreamlitMarkdown", () => {
     expect(screen.getByText("Some Page")).toHaveAttribute("target", "_self")
   })
 
-  it("doesn't render header anchors when isSidebar is true", () => {
+  it("doesn't render header anchors when isInSidebar is true", () => {
     const source = "# header"
     render(
       <IsSidebarContext.Provider value={true}>
@@ -135,7 +153,19 @@ describe("StreamlitMarkdown", () => {
       </IsSidebarContext.Provider>
     )
     expect(
-      screen.queryByTestId("StyledLinkIconContainer")
+      screen.queryByTestId("stHeadingWithActionElements")
+    ).not.toBeInTheDocument()
+  })
+
+  it("doesn't render header anchors when isInDialog is true", () => {
+    const source = "# header"
+    render(
+      <IsDialogContext.Provider value={true}>
+        <StreamlitMarkdown source={source} allowHTML={false} />
+      </IsDialogContext.Provider>
+    )
+    expect(
+      screen.queryByTestId("stHeadingWithActionElements")
     ).not.toBeInTheDocument()
   })
 
@@ -166,10 +196,55 @@ describe("StreamlitMarkdown", () => {
     { input: "[Link Text](www.example.com)", tag: "a", expected: "Link Text" },
     { input: "🐶", tag: "p", expected: "🐶" },
     { input: ":joy:", tag: "p", expected: "😂" },
+    { input: ":material/search:", tag: "span", expected: "search" },
   ]
 
   test.each(validCases)(
     "renders valid markdown when isLabel is true - $tag",
+    ({ input, tag, expected }) => {
+      render(<StreamlitMarkdown source={input} allowHTML={false} isLabel />)
+      const markdownText = screen.getByText(expected)
+      expect(markdownText).toBeInTheDocument()
+
+      const expectedTag = markdownText.nodeName.toLowerCase()
+      expect(expectedTag).toEqual(tag)
+
+      // Removes rendered StreamlitMarkdown component before next case run
+      cleanup()
+    }
+  )
+
+  it("renders streamlit logo in markdown when isLabel is true", () => {
+    render(
+      <StreamlitMarkdown source={":streamlit:"} allowHTML={false} isLabel />
+    )
+    const image = screen.getByRole("img")
+    expect(image).toHaveAttribute("alt", "Streamlit logo")
+    expect(image).toHaveAttribute(
+      "src",
+      expect.stringContaining("streamlit-mark-color")
+    )
+  })
+
+  // Typographical symbol replacements
+  const symbolReplacementCases = [
+    { input: "a -> b", tag: "p", expected: "a → b" },
+    { input: "a <- b", tag: "p", expected: "a ← b" },
+    { input: "a <-> b", tag: "p", expected: "a ↔ b" },
+    { input: "a -- b", tag: "p", expected: "a — b" },
+    { input: "a >= b", tag: "p", expected: "a ≥ b" },
+    { input: "a <= b", tag: "p", expected: "a ≤ b" },
+    { input: "a ~= b", tag: "p", expected: "a ≈ b" },
+    {
+      input: "[Link ->](https://example.com/arrow->)",
+      tag: "a",
+      expected: "Link ->",
+    },
+    { input: "`Code ->`", tag: "code", expected: "Code ->" },
+  ]
+
+  test.each(symbolReplacementCases)(
+    "replaces symbols with nicer typographical symbols - $input",
     ({ input, tag, expected }) => {
       render(<StreamlitMarkdown source={input} allowHTML={false} isLabel />)
       const markdownText = screen.getByText(expected)
@@ -206,6 +281,9 @@ describe("StreamlitMarkdown", () => {
     { input: "# Heading 1", tag: "h1", expected: "Heading 1" },
     { input: "## Heading 2", tag: "h2", expected: "Heading 2" },
     { input: "### Heading 3", tag: "h3", expected: "Heading 3" },
+    { input: "#### Heading 4", tag: "h4", expected: "Heading 4" },
+    { input: "##### Heading 5", tag: "h5", expected: "Heading 5" },
+    { input: "###### Heading 6", tag: "h6", expected: "Heading 6" },
     { input: "- List Item 1", tag: "ul", expected: "List Item 1" },
     { input: "- List Item 1", tag: "li", expected: "List Item 1" },
     { input: "1. List Item 1", tag: "ol", expected: "List Item 1" },
@@ -234,15 +312,6 @@ describe("StreamlitMarkdown", () => {
     }
   )
 
-  it("doesn't render images when isLabel is true", () => {
-    const source =
-      "![Image Text](https://dictionary.cambridge.org/us/images/thumb/corgi_noun_002_08554.jpg?version=5.0.297)"
-
-    render(<StreamlitMarkdown source={source} allowHTML={false} isLabel />)
-    const image = screen.queryByAltText("Image Text")
-    expect(image).not.toBeInTheDocument()
-  })
-
   it("doesn't render links when disableLinks is true", () => {
     // Valid markdown further restricted with buttons to eliminate links
     const source = "[Link text](www.example.com)"
@@ -263,7 +332,11 @@ describe("StreamlitMarkdown", () => {
     render(<StreamlitMarkdown source={source} allowHTML={false} isToast />)
 
     const textTag = screen.getByText("Here is some toast text")
-    expect(textTag).toHaveStyle("font-size: 14px")
+    expect(textTag).toBeInTheDocument()
+
+    // Use the smaller font size for the markdown container
+    const markdownContainer = screen.getByTestId("stMarkdownContainer")
+    expect(markdownContainer).toHaveStyle("font-size: 14px")
   })
 
   it("renders regular text sizing when largerLabel is true", () => {
@@ -281,6 +354,22 @@ describe("StreamlitMarkdown", () => {
     expect(textTag).toHaveStyle("font-size: inherit")
   })
 
+  it("renders bold label text when boldLabel is true", () => {
+    const source = "Here is some checkbox label text"
+    render(
+      <StreamlitMarkdown
+        source={source}
+        allowHTML={false}
+        isLabel
+        boldLabel
+        largerLabel
+      />
+    )
+
+    const textTag = screen.getByText("Here is some checkbox label text")
+    expect(textTag).toHaveStyle("font-weight: 600")
+  })
+
   it("colours text properly", () => {
     const colorMapping = new Map([
       ["red", colors.red80],
@@ -290,7 +379,7 @@ describe("StreamlitMarkdown", () => {
       ["orange", colors.orange100],
       ["gray", colors.gray80],
       ["grey", colors.gray80],
-      ["rainbow", "transparent"],
+      ["rainbow", "rgba(0, 0, 0, 0)"],
     ])
 
     colorMapping.forEach(function (style, color) {
@@ -300,6 +389,85 @@ describe("StreamlitMarkdown", () => {
       const tagName = markdown.nodeName.toLowerCase()
       expect(tagName).toBe("span")
       expect(markdown).toHaveStyle(`color: ${style}`)
+
+      // Removes rendered StreamlitMarkdown component before next case run
+      cleanup()
+    })
+  })
+
+  it("properly adds custom material icon", () => {
+    const source = `:material/search: Icon`
+    render(<StreamlitMarkdown source={source} allowHTML={false} />)
+    const markdown = screen.getByText("search")
+    const tagName = markdown.nodeName.toLowerCase()
+    expect(tagName).toBe("span")
+    expect(markdown).toHaveStyle(`font-family: Material Symbols Rounded`)
+    expect(markdown).toHaveStyle(`user-select: none`)
+    expect(markdown).toHaveStyle(`vertical-align: bottom`)
+    expect(markdown).toHaveAttribute("translate", "no")
+  })
+
+  it("does not remove unknown directive", () => {
+    const source = `test :foo test:test :`
+    render(<StreamlitMarkdown source={source} allowHTML={false} />)
+    const markdown = screen.getByText("test :foo test:test :")
+    expect(markdown).toBeInTheDocument()
+  })
+
+  it("properly adds background colors", () => {
+    const redbg = transparentize(colors.red80, 0.9)
+    const orangebg = transparentize(colors.yellow70, 0.9)
+    const greenbg = transparentize(colors.green70, 0.9)
+    const bluebg = transparentize(colors.blue70, 0.9)
+    const violetbg = transparentize(colors.purple70, 0.9)
+    const graybg = transparentize(colors.gray70, 0.9)
+
+    const colorMapping = new Map([
+      ["red", redbg],
+      ["blue", bluebg],
+      ["green", greenbg],
+      ["violet", violetbg],
+      ["orange", orangebg],
+      ["gray", graybg],
+      ["grey", graybg],
+    ])
+
+    colorMapping.forEach(function (style, color) {
+      const source = `:${color}-background[text]`
+      render(<StreamlitMarkdown source={source} allowHTML={false} />)
+      const markdown = screen.getByText("text")
+      const tagName = markdown.nodeName.toLowerCase()
+      expect(tagName).toBe("span")
+      expect(markdown).toHaveStyle(`background-color: ${style}`)
+
+      // Removes rendered StreamlitMarkdown component before next case run
+      cleanup()
+    })
+  })
+
+  it("properly adds rainbow background color", () => {
+    const redbg = transparentize(colors.red80, 0.9)
+    const orangebg = transparentize(colors.yellow70, 0.9)
+    const yellowbg = transparentize(colors.yellow70, 0.9)
+    const greenbg = transparentize(colors.green70, 0.9)
+    const bluebg = transparentize(colors.blue70, 0.9)
+    const violetbg = transparentize(colors.purple70, 0.9)
+    const purplebg = transparentize(colors.purple90, 0.9)
+
+    const colorMapping = new Map([
+      [
+        "rainbow",
+        `linear-gradient(to right, ${redbg}, ${orangebg}, ${yellowbg}, ${greenbg}, ${bluebg}, ${violetbg}, ${purplebg})`,
+      ],
+    ])
+
+    colorMapping.forEach(function (style, color) {
+      const source = `:${color}-background[text]`
+      render(<StreamlitMarkdown source={source} allowHTML={false} />)
+      const markdown = screen.getByText("text")
+      const tagName = markdown.nodeName.toLowerCase()
+      expect(tagName).toBe("span")
+      expect(markdown).toHaveStyle(`background: ${style}`)
 
       // Removes rendered StreamlitMarkdown component before next case run
       cleanup()
@@ -325,19 +493,16 @@ describe("CustomCodeTag Element", () => {
     const props = getCustomCodeTagProps()
     render(<CustomCodeTag {...props} />)
 
-    const codeTag = screen.getByText(`st.write("Hello")`)
-    const tagName = codeTag.nodeName.toLowerCase()
-
-    expect(codeTag).toBeInTheDocument()
-    expect(tagName).toBe("code")
+    const stCode = screen.getByTestId("stCode")
+    expect(stCode).toBeInTheDocument()
   })
 
   it("should render as plaintext", () => {
     const props = getCustomCodeTagProps({ className: "language-plaintext" })
     render(<CustomCodeTag {...props} />)
 
-    const codeTag = screen.getByText(`st.write("Hello")`)
-    expect(codeTag).toHaveClass("language-plaintext")
+    const stCode = screen.getByTestId("stCode")
+    expect(stCode.innerHTML.indexOf(`class="language-plaintext"`)).not.toBe(-1)
   })
 
   it("should render copy button when code block has content", () => {
@@ -364,11 +529,32 @@ describe("CustomCodeTag Element", () => {
   it("should render inline", () => {
     const props = getCustomCodeTagProps({ inline: true })
     const { baseElement } = render(<CustomCodeTag {...props} />)
-    expect(baseElement.innerHTML).toBe(
-      "<div><code>" +
+    const codeWithoutClass = baseElement.innerHTML.replace(
+      /class="(.*)"/,
+      'class="foo"'
+    )
+
+    expect(codeWithoutClass).toBe(
+      '<div><code class="foo">' +
         "import streamlit as st\n\n" +
         'st.write("Hello")\n' +
         "</code></div>"
+    )
+  })
+})
+
+describe("CustomPreTag", () => {
+  it("should render without crashing", () => {
+    const props = getCustomCodeTagProps()
+    render(<CustomPreTag {...props} />)
+
+    const preTag = screen.getByTestId("stMarkdownPre")
+    const tagName = preTag.nodeName.toLowerCase()
+
+    expect(preTag).toBeInTheDocument()
+    expect(tagName).toBe("div")
+    expect(preTag).toHaveTextContent(
+      'import streamlit as st st.write("Hello")'
     )
   })
 })

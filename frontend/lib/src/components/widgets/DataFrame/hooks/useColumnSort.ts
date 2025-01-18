@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,9 @@
 import React from "react"
 
 import {
-  GridColumn,
-  GridCell,
   DataEditorProps,
+  GridCell,
+  GridColumn,
 } from "@glideapps/glide-data-grid"
 import { useColumnSort as useGlideColumnSort } from "@glideapps/glide-data-grid-source"
 
@@ -97,7 +97,9 @@ function useColumnSort(
       sort,
     })
 
-  const updatedColumns = updateSortingHeader(columns, sort)
+  const updatedColumns = React.useMemo(() => {
+    return updateSortingHeader(columns, sort)
+  }, [columns, sort])
 
   const sortColumn = React.useCallback(
     (index: number) => {

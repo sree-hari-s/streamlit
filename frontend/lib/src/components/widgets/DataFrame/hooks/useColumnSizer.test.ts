@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { SizedGridColumn, GridColumn } from "@glideapps/glide-data-grid"
-import { renderHook, act } from "@testing-library/react-hooks"
+import { GridColumn, SizedGridColumn } from "@glideapps/glide-data-grid"
+import { act, renderHook } from "@testing-library/react-hooks"
 
 import useColumnSizer from "./useColumnSizer"
 

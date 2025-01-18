@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 import { transparentize } from "color2k"
+
 import { colors } from "@streamlit/lib/src/theme/primitives/colors"
 
 export default {
@@ -22,6 +23,10 @@ export default {
   bgColor: colors.gray100,
   secondaryBg: colors.gray90,
   bodyText: colors.gray10,
+  navTextColor: colors.gray50,
+  navActiveTextColor: colors.gray10,
+  navIconColor: colors.gray70,
+  sidebarControlColor: colors.gray10,
   warning: colors.yellow20,
   warningBg: transparentize(colors.yellow70, 0.8),
   success: colors.green10,
@@ -32,12 +37,4 @@ export default {
   dangerBg: transparentize(colors.red60, 0.8),
   primary: colors.red70,
   disabled: colors.gray70,
-  lightestGray: colors.gray20,
-  lightGray: colors.gray30,
-  gray: colors.gray60,
-  darkGray: colors.gray70,
-  red: colors.red80,
-  blue: colors.blue80,
-  green: colors.green80,
-  yellow: colors.yellow80,
 }

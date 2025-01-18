@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 from parameterized import parameterized
-from sqlalchemy.exc import DatabaseError, InternalError, OperationalError
 
 import streamlit as st
 from streamlit.connections import SQLConnection
@@ -39,6 +38,7 @@ DB_SECRETS = {
 }
 
 
+@pytest.mark.require_integration
 class SQLConnectionTest(unittest.TestCase):
     def tearDown(self) -> None:
         st.cache_data.clear()
@@ -75,13 +75,18 @@ class SQLConnectionTest(unittest.TestCase):
     )
     @patch("sqlalchemy.create_engine")
     def test_kwargs_overwrite_secrets_values(self, patched_create_engine):
-        SQLConnection("my_sql_connection", port=2345, username="DnomaidEruza")
+        SQLConnection(
+            "my_sql_connection",
+            port=2345,
+            username="DnomaidEruza",
+            query={"charset": "utf8mb4"},
+        )
 
         patched_create_engine.assert_called_once()
         args, _ = patched_create_engine.call_args_list[0]
         assert (
             str(args[0])
-            == "postgres+psycopg2://DnomaidEruza:hunter2@localhost:2345/postgres"
+            == "postgres+psycopg2://DnomaidEruza:hunter2@localhost:2345/postgres?charset=utf8mb4"
         )
 
     def test_error_if_no_config(self):
@@ -129,7 +134,7 @@ class SQLConnectionTest(unittest.TestCase):
         assert kwargs == {"foo": "bar", "baz": "qux"}
 
     @patch("streamlit.connections.sql_connection.SQLConnection._connect", MagicMock())
-    @patch("streamlit.connections.sql_connection.pd.read_sql")
+    @patch("pandas.read_sql")
     def test_query_caches_value(self, patched_read_sql):
         # Caching functions rely on an active script run ctx
         add_script_run_ctx(threading.current_thread(), create_mock_script_run_ctx())
@@ -142,66 +147,70 @@ class SQLConnectionTest(unittest.TestCase):
         patched_read_sql.assert_called_once()
 
     @patch("streamlit.connections.sql_connection.SQLConnection._connect", MagicMock())
-    def test_repr_html_(self):
-        conn = SQLConnection("my_sql_connection")
-        with conn.session as s:
-            s.bind.dialect.name = "postgres"
-        repr_ = conn._repr_html_()
+    @patch("pandas.read_sql")
+    def test_does_not_reset_cache_when_ttl_changes(self, patched_read_sql):
+        # Caching functions rely on an active script run ctx
+        add_script_run_ctx(threading.current_thread(), create_mock_script_run_ctx())
+        patched_read_sql.return_value = "i am a dataframe"
 
-        assert (
-            "st.connection my_sql_connection built from `streamlit.connections.sql_connection.SQLConnection`"
-            in repr_
-        )
-        assert "Dialect: `postgres`" in repr_
+        conn = SQLConnection("my_sql_connection")
+
+        conn.query("SELECT 1;", ttl=10)
+        conn.query("SELECT 2;", ttl=20)
+        conn.query("SELECT 1;", ttl=10)
+        conn.query("SELECT 2;", ttl=20)
+
+        assert patched_read_sql.call_count == 2
 
     @patch("streamlit.connections.sql_connection.SQLConnection._connect", MagicMock())
-    @patch(
-        "streamlit.connections.sql_connection.SQLConnection._secrets",
-        PropertyMock(return_value=AttrDict({"url": "some_sql_conn_string"})),
-    )
-    def test_repr_html_with_secrets(self):
-        conn = SQLConnection("my_sql_connection")
-        with conn.session as s:
-            s.bind.dialect.name = "postgres"
-        repr_ = conn._repr_html_()
+    @patch("pandas.read_sql")
+    def test_scopes_caches_by_connection_name(self, patched_read_sql):
+        # Caching functions rely on an active script run ctx
+        add_script_run_ctx(threading.current_thread(), create_mock_script_run_ctx())
+        patched_read_sql.return_value = "i am a dataframe"
 
-        assert (
-            "st.connection my_sql_connection built from `streamlit.connections.sql_connection.SQLConnection`"
-            in repr_
-        )
-        assert "Dialect: `postgres`" in repr_
-        assert "Configured from `[connections.my_sql_connection]`" in repr_
+        conn1 = SQLConnection("my_sql_connection1")
+        conn2 = SQLConnection("my_sql_connection2")
 
-    @parameterized.expand([(DatabaseError,), (InternalError,), (OperationalError,)])
+        conn1.query("SELECT 1;")
+        conn1.query("SELECT 1;")
+        conn2.query("SELECT 1;")
+        conn2.query("SELECT 1;")
+
+        assert patched_read_sql.call_count == 2
+
     @patch("streamlit.connections.sql_connection.SQLConnection._connect", MagicMock())
-    @patch("streamlit.connections.sql_connection.pd.read_sql")
-    def test_retry_behavior(self, error_class, patched_read_sql):
-        patched_read_sql.side_effect = error_class("kaboom", params=None, orig=None)
+    @patch("pandas.read_sql")
+    def test_retry_behavior(self, patched_read_sql):
+        from sqlalchemy.exc import DatabaseError, InternalError, OperationalError
 
-        conn = SQLConnection("my_sql_connection")
+        for error_class in [DatabaseError, InternalError, OperationalError]:
+            patched_read_sql.side_effect = error_class("kaboom", params=None, orig=None)
 
-        with patch.object(conn, "reset", wraps=conn.reset) as wrapped_reset:
-            with pytest.raises(error_class):
-                conn.query("SELECT 1;")
+            conn = SQLConnection("my_sql_connection")
 
-            # Our connection should have been reset after each failed attempt to call
+            with patch.object(conn, "reset", wraps=conn.reset) as wrapped_reset:
+                with pytest.raises(error_class):
+                    conn.query("SELECT 1;")
+
+                # Our connection should have been reset after each failed attempt to call
+                # query.
+                assert wrapped_reset.call_count == 3
+
+            # conn._connect should have been called three times: once in the initial
+            # connection, then once each after the second and third attempts to call
             # query.
-            assert wrapped_reset.call_count == 3
-
-        # conn._connect should have been called three times: once in the initial
-        # connection, then once each after the second and third attempts to call
-        # query.
-        assert conn._connect.call_count == 3
-        conn._connect.reset_mock()
+            assert conn._connect.call_count == 3
+            conn._connect.reset_mock()
 
     @patch("streamlit.connections.sql_connection.SQLConnection._connect", MagicMock())
-    @patch("streamlit.connections.sql_connection.pd.read_sql")
+    @patch("pandas.read_sql")
     def test_retry_behavior_fails_fast_for_most_errors(self, patched_read_sql):
         patched_read_sql.side_effect = Exception("kaboom")
 
         conn = SQLConnection("my_sql_connection")
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             conn.query("SELECT 1;")
 
         # conn._connect should have just been called once when first creating the

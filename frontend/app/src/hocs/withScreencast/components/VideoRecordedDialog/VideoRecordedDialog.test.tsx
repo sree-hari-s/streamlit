@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,65 +15,73 @@
  */
 
 import React from "react"
-import { BaseProvider, LightTheme } from "baseui"
-import { ReactWrapper } from "enzyme"
 
-import { Modal, ModalHeader, ModalBody, mount } from "@streamlit/lib"
+import { BaseProvider, LightTheme } from "baseui"
+import { screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
+import { render } from "@streamlit/lib"
+
 import VideoRecordedDialog, { Props } from "./VideoRecordedDialog"
 
-URL.createObjectURL = jest.fn()
+URL.createObjectURL = vi.fn()
 
 const getProps = (props: Partial<Props> = {}): Props => ({
   fileName: "test",
-  onClose: jest.fn(),
+  onClose: vi.fn(),
   videoBlob: new Blob(),
   ...props,
 })
 
 describe("VideoRecordedDialog", () => {
   const props = getProps()
-  let wrapper: ReactWrapper
 
-  beforeEach(() => {
-    wrapper = mount(
+  it("renders without crashing", () => {
+    render(
       <BaseProvider theme={LightTheme}>
         <VideoRecordedDialog {...props} />
       </BaseProvider>
     )
-  })
-
-  afterEach(() => {
-    wrapper.unmount()
-  })
-
-  it("renders without crashing", () => {
-    expect(wrapper.html()).not.toBeNull()
+    expect(screen.getByTestId("stDialog")).toBeInTheDocument()
+    expect(screen.getByTestId("stVideoRecordedDialog")).toBeInTheDocument()
   })
 
   it("should render a header", () => {
-    const headerWrapper = wrapper.find(ModalHeader)
-    expect(headerWrapper.props().children).toBe("Next steps")
+    render(
+      <BaseProvider theme={LightTheme}>
+        <VideoRecordedDialog {...props} />
+      </BaseProvider>
+    )
+    expect(screen.getByText("Next steps")).toHaveStyle("font-weight: 600")
   })
 
   it("should render a video", () => {
-    const bodyWrapper = wrapper.find(ModalBody)
-
-    expect(bodyWrapper.find("StyledVideo").length).toBe(1)
+    render(
+      <BaseProvider theme={LightTheme}>
+        <VideoRecordedDialog {...props} />
+      </BaseProvider>
+    )
+    expect(screen.getByTestId("stVideoRecordedDialog")).toBeInTheDocument()
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      "https://www.webmproject.org/"
+    )
     expect(URL.createObjectURL).toHaveBeenCalled()
   })
 
-  it("should render a download button", () => {
-    const buttonWrapper = wrapper.find(ModalBody).find("button")
+  it("should render a download button", async () => {
+    const user = userEvent.setup()
+    render(
+      <BaseProvider theme={LightTheme}>
+        <VideoRecordedDialog {...props} />
+      </BaseProvider>
+    )
+    const downloadButton = screen.getByRole("button", {
+      name: "Save video to disk",
+    })
 
-    buttonWrapper.simulate("click")
-
-    expect(buttonWrapper.length).toBe(1)
+    expect(downloadButton).toBeInTheDocument()
+    await user.click(downloadButton)
     expect(props.onClose).toHaveBeenCalled()
-  })
-
-  it("should render a Modal with overridden width", () => {
-    const overrides = wrapper.find(Modal).prop("overrides")
-    // @ts-expect-error
-    expect(overrides.Dialog.style.width).toEqual("80vw")
   })
 })

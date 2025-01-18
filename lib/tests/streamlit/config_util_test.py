@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,9 @@
 # limitations under the License.
 
 """Config Util Unittest."""
+
+from __future__ import annotations
+
 import copy
 import re
 import textwrap
@@ -71,7 +74,7 @@ class ConfigUtilTest(unittest.TestCase):
         result = config_util._clean_paragraphs("")
         self.assertEqual([""], result)
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_default_config_options_commented_out(self, patched_echo):
         config_options = create_config_options(
             {
@@ -95,7 +98,7 @@ class ConfigUtilTest(unittest.TestCase):
         assert 'address = "example.com"' in lines
         assert "port = 8501" in lines
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_ui_section_hidden(self, patched_echo):
         config_options = create_config_options({})
 
@@ -156,7 +159,7 @@ class ConfigUtilTest(unittest.TestCase):
             config_util.server_option_changed(old_options, new_options), changed
         )
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_newlines_preserved_in_description(self, patched_echo):
         config_options = {
             "server.customOption": ConfigOption(
@@ -182,7 +185,7 @@ class ConfigUtilTest(unittest.TestCase):
         assert "# Each line should be preserved." in lines
         assert "# Even this one." in lines
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_omits_empty_lines_at_description_start(self, patched_echo):
         config_options = {
             "server.customOption": ConfigOption(
@@ -217,7 +220,7 @@ class ConfigUtilTest(unittest.TestCase):
             lines[description_index - 2].strip() != ""
         ), "The line before the preceding line should not be empty (this is the section header)"
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_description_appears_before_option(self, patched_echo):
         config_options = {
             "server.customOption": ConfigOption(
@@ -244,7 +247,7 @@ class ConfigUtilTest(unittest.TestCase):
         # Assert that the description appears before the option.
         self.assertLess(description_index, option_index)
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_show_config_section_formatting(self, patched_echo):
         config_options = create_config_options({"server.address": "localhost"})
         config_util.show_config(CONFIG_SECTION_DESCRIPTIONS, config_options)
@@ -255,7 +258,7 @@ class ConfigUtilTest(unittest.TestCase):
 
         self.assertIn("[server]", lines)
 
-    @patch("streamlit.config_util.click.echo")
+    @patch("click.secho")
     def test_show_config_hidden_option(self, patched_echo):
         config_options = {
             "server.hiddenOption": ConfigOption(

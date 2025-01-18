@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,12 @@
 
 from playwright.sync_api import Page, expect
 
-from e2e_playwright.conftest import ImageCompareFunction
+from e2e_playwright.conftest import ImageCompareFunction, wait_for_app_run
+from e2e_playwright.shared.app_utils import (
+    check_top_level_class,
+    expect_help_tooltip,
+    get_element_by_key,
+)
 
 
 def test_radio_widget_rendering(
@@ -22,7 +27,7 @@ def test_radio_widget_rendering(
 ):
     """Test that the radio widgets are correctly rendered via screenshot matching."""
     radio_widgets = themed_app.get_by_test_id("stRadio")
-    expect(radio_widgets).to_have_count(13)
+    expect(radio_widgets).to_have_count(14)
 
     assert_snapshot(radio_widgets.nth(0), name="st_radio-default")
     assert_snapshot(radio_widgets.nth(1), name="st_radio-formatted_options")
@@ -37,6 +42,12 @@ def test_radio_widget_rendering(
     assert_snapshot(radio_widgets.nth(10), name="st_radio-horizontal_captions")
     assert_snapshot(radio_widgets.nth(11), name="st_radio-callback_help")
     assert_snapshot(radio_widgets.nth(12), name="st_radio-empty_selection")
+    assert_snapshot(radio_widgets.nth(13), name="st_radio-markdown_label")
+
+
+def test_help_tooltip_works(app: Page):
+    element_with_help = app.get_by_test_id("stRadio").nth(11)
+    expect_help_tooltip(app, element_with_help, "help text")
 
 
 def test_radio_has_correct_default_values(app: Page):
@@ -68,8 +79,9 @@ def test_radio_has_correct_default_values(app: Page):
 def test_set_value_correctly_when_click(app: Page):
     """Test that st.radio returns the correct values when the selection is changed."""
     for index, element in enumerate(app.get_by_test_id("stRadio").all()):
-        if index != 3:  # skip disabled widget
-            element.locator('label[data-baseweb="radio"]').last.click(force=True)
+        if index not in [2, 3]:  # skip disabled and no-options widget
+            element.locator('label[data-baseweb="radio"]').nth(1).click(force=True)
+            wait_for_app_run(app)
 
     expected = [
         "value 1: male",
@@ -80,9 +92,9 @@ def test_set_value_correctly_when_click(app: Page):
         "value 6: male",
         "value 7: male",
         "value 8: male",
-        "value 9: red blue green violet orange",
-        "value 10: G",
-        "value 11: no",
+        "value 9: italics text",
+        "value 10: B",
+        "value 11: maybe",
         "value 12: male",
         "radio changed: False",
         "value 13: male",
@@ -99,6 +111,7 @@ def test_calls_callback_on_change(app: Page):
     radio_widget = app.get_by_test_id("stRadio").nth(11)
 
     radio_widget.locator('label[data-baseweb="radio"]').first.click(force=True)
+    wait_for_app_run(app)
 
     expect(app.get_by_test_id("stMarkdown").nth(11)).to_have_text(
         "value 12: female",
@@ -112,6 +125,7 @@ def test_calls_callback_on_change(app: Page):
     # Change different date input to trigger delta path change
     first_date_input_field = app.get_by_test_id("stRadio").first
     first_date_input_field.locator('label[data-baseweb="radio"]').last.click(force=True)
+    wait_for_app_run(app)
 
     expect(app.get_by_test_id("stMarkdown").first).to_have_text(
         "value 1: male", use_inner_text=True
@@ -122,3 +136,17 @@ def test_calls_callback_on_change(app: Page):
         "value 12: female",
         use_inner_text=True,
     )
+    expect(app.get_by_test_id("stMarkdown").nth(12)).to_have_text(
+        "radio changed: False",
+        use_inner_text=True,
+    )
+
+
+def test_check_top_level_class(app: Page):
+    """Check that the top level class is correctly set."""
+    check_top_level_class(app, "stRadio")
+
+
+def test_custom_css_class_via_key(app: Page):
+    """Test that the element can have a custom css class via the key argument."""
+    expect(get_element_by_key(app, "radio12")).to_be_visible()

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import React, { MouseEvent, ReactElement, ReactNode } from "react"
 import ProgressBar, {
   Size as ProgressBarSize,
 } from "@streamlit/lib/src/components/shared/ProgressBar"
+
 import {
   StyledCameraInputBaseButton,
   StyledProgressBar,
@@ -27,8 +28,8 @@ import {
 export interface CameraInputButtonProps {
   onClick?: (event: MouseEvent<HTMLButtonElement>) => any
   disabled?: boolean
-  children: ReactNode
   progress?: number | null
+  children?: ReactNode
 }
 
 function CameraInputButton({
@@ -53,20 +54,20 @@ function CameraInputButton({
             overrides={{
               Bar: {
                 style: {
-                  borderTopLeftRadius: "0px",
-                  borderTopRightRadius: "0px",
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0,
                 },
               },
               BarProgress: {
                 style: {
-                  borderTopLeftRadius: "0px",
-                  borderTopRightRadius: "0px",
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0,
                 },
               },
               BarContainer: {
                 style: {
-                  borderTopLeftRadius: "0px",
-                  borderTopRightRadius: "0px",
+                  borderTopLeftRadius: 0,
+                  borderTopRightRadius: 0,
                 },
               },
             }}

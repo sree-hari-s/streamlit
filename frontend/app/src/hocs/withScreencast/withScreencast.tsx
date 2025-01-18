@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-import { logWarning } from "@streamlit/lib"
-import ScreenCastRecorder from "@streamlit/app/src/util/ScreenCastRecorder"
-import hoistNonReactStatics from "hoist-non-react-statics"
-import React, { PureComponent, ComponentType, ReactNode } from "react"
+import React, { ComponentType, PureComponent, ReactNode } from "react"
 
+import hoistNonReactStatics from "hoist-non-react-statics"
+
+import { isNullOrUndefined, logWarning } from "@streamlit/lib"
+import ScreenCastRecorder from "@streamlit/app/src/util/ScreenCastRecorder"
 import {
-  UnsupportedBrowserDialog,
   ScreencastDialog,
+  UnsupportedBrowserDialog,
   VideoRecordedDialog,
 } from "@streamlit/app/src/hocs/withScreencast/components"
 import Countdown from "@streamlit/app/src/components/Countdown"
@@ -50,13 +51,14 @@ export interface ScreenCastHOC {
 
 interface InjectedProps {
   screenCast: ScreenCastHOC
+  testOverride?: Steps
 }
 
 type WrappedProps<P extends InjectedProps> = Omit<P, "screenCast">
 
 function withScreencast<P extends InjectedProps>(
-  WrappedComponent: ComponentType<P>
-): ComponentType<WrappedProps<P>> {
+  WrappedComponent: ComponentType<React.PropsWithChildren<P>>
+): ComponentType<React.PropsWithChildren<WrappedProps<P>>> {
   class ComponentWithScreencast extends PureComponent<
     WrappedProps<P>,
     WithScreenCastState
@@ -70,7 +72,7 @@ function withScreencast<P extends InjectedProps>(
     state = {
       fileName: "streamlit-screencast",
       recordAudio: false,
-      currentState: "OFF" as Steps,
+      currentState: this.props.testOverride || ("OFF" as Steps),
     }
 
     private toggleRecordAudio = (): void => {
@@ -119,7 +121,7 @@ function withScreencast<P extends InjectedProps>(
       const { currentState } = this.state
 
       // We should do nothing if the user try to stop recording when it is not started
-      if (currentState === "OFF" || this.recorder == null) {
+      if (currentState === "OFF" || isNullOrUndefined(this.recorder)) {
         return
       }
 
@@ -145,7 +147,7 @@ function withScreencast<P extends InjectedProps>(
     }
 
     private onCountdownEnd = async (): Promise<any> => {
-      if (this.recorder == null) {
+      if (isNullOrUndefined(this.recorder)) {
         // Should never happen.
         throw new Error("Countdown finished but recorder is null")
       }
@@ -185,7 +187,7 @@ function withScreencast<P extends InjectedProps>(
       }: WithScreenCastState = this.state
 
       return (
-        <div className="withScreencast">
+        <div className="withScreencast" data-testid="stScreencast">
           <WrappedComponent
             {...(this.props as P)}
             screenCast={this.getScreenCastProps()}

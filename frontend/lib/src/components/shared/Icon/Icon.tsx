@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,12 @@
  */
 
 import React, { ReactElement, ReactNode } from "react"
+
 import { EmotionIcon } from "@emotion-icons/emotion-icon"
+
 import { IconSize, ThemeColor } from "@streamlit/lib/src/theme"
 
-import { StyledIcon, StyledEmojiIcon } from "./styled-components"
+import { StyledEmojiIcon, StyledIcon } from "./styled-components"
 
 interface GetDefaultPropsArgs {
   size?: IconSize
@@ -48,6 +50,7 @@ interface IconProps {
   color?: ThemeColor
   margin?: string
   padding?: string
+  testid?: string
 }
 
 const Icon = ({
@@ -56,11 +59,13 @@ const Icon = ({
   size,
   margin,
   padding,
+  testid,
 }: IconProps): ReactElement => (
   <StyledIcon
     as={content}
     color={color || "inherit"}
     aria-hidden="true"
+    data-testid={testid}
     {...getDefaultProps({ size, margin, padding })}
   />
 )
@@ -70,6 +75,7 @@ interface EmojiIconProps {
   margin?: string
   padding?: string
   children: ReactNode
+  testid?: string
 }
 
 export const EmojiIcon = ({
@@ -77,8 +83,10 @@ export const EmojiIcon = ({
   margin,
   padding,
   children,
+  testid,
 }: EmojiIconProps): ReactElement => (
   <StyledEmojiIcon
+    data-testid={testid || "stIconEmoji"}
     aria-hidden="true"
     {...getDefaultProps({ size, margin, padding })}
   >

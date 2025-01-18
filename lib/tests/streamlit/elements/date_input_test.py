@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,10 @@ from pytest import raises
 import streamlit as st
 from streamlit.errors import StreamlitAPIException
 from streamlit.proto.LabelVisibilityMessage_pb2 import LabelVisibilityMessage
+from streamlit.testing.v1.app_test import AppTest
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
+
+TODAY = datetime.today()
 
 
 class DateInputTest(DeltaGeneratorTestCase):
@@ -50,15 +53,44 @@ class DateInputTest(DeltaGeneratorTestCase):
         c = self.get_delta_from_queue().new_element.date_input
         self.assertEqual(c.disabled, True)
 
+    def test_none_value(self):
+        """Test that it can be called with None as value."""
+        st.date_input("the label", value=None)
+
+        c = self.get_delta_from_queue().new_element.date_input
+        self.assertEqual(c.label, "the label")
+        # If a proto property is null is not determined by this value,
+        # but by the check via the HasField method:
+        self.assertEqual(c.default, [])
+
     @parameterized.expand(
         [
+            # Epoch
             (date(1970, 1, 1), ["1970/01/01"]),
+            # All scalar types
+            (date(1971, 2, 3), ["1971/02/03"]),
             (datetime(2019, 7, 6, 21, 15), ["2019/07/06"]),
+            ("1971-02-03", ["1971/02/03"]),
+            ("1971-02-03 12:34:56", ["1971/02/03"]),
+            # Lists
             ([], []),
             ([datetime(2019, 7, 6, 21, 15)], ["2019/07/06"]),
             (
-                [datetime(2019, 7, 6, 21, 15), datetime(2019, 7, 6, 21, 15)],
-                ["2019/07/06", "2019/07/06"],
+                [date(2019, 7, 6), date(2020, 8, 7)],
+                ["2019/07/06", "2020/08/07"],
+            ),
+            (
+                [datetime(2019, 7, 6, 21, 15), datetime(2020, 8, 7, 21, 15)],
+                ["2019/07/06", "2020/08/07"],
+            ),
+            (
+                ["2019-07-06", "2020-08-07"],
+                ["2019/07/06", "2020/08/07"],
+            ),
+            # Mixed list
+            (
+                [date(2019, 7, 6), datetime(2020, 8, 7, 21, 15)],
+                ["2019/07/06", "2020/08/07"],
             ),
         ]
     )
@@ -69,6 +101,23 @@ class DateInputTest(DeltaGeneratorTestCase):
         c = self.get_delta_from_queue().new_element.date_input
         self.assertEqual(c.label, "the label")
         self.assertEqual(c.default, proto_value)
+
+    @parameterized.expand(
+        [
+            ("2000-01-02", "1999-10-11", "2001-02-03"),
+            ("2000-01-02", "1999-10-11 12:34:56", "2001-02-03 11:22:33"),
+            ("2000-01-02", date(1999, 10, 11), date(2001, 2, 3)),
+            ("2000-01-02", datetime(1999, 10, 11), datetime(2001, 2, 3)),
+        ]
+    )
+    def test_min_max_value_types(self, arg_value, min_date_value, max_date_value):
+        """Test the datatypes accepted by min_value/max_value."""
+        st.date_input("the label", arg_value, min_date_value, max_date_value)
+
+        c = self.get_delta_from_queue().new_element.date_input
+        self.assertEqual(c.label, "the label")
+        self.assertEqual(c.min, "1999/10/11")
+        self.assertEqual(c.max, "2001/02/03")
 
     @parameterized.expand(
         [
@@ -92,29 +141,29 @@ class DateInputTest(DeltaGeneratorTestCase):
     @parameterized.expand(
         [
             (
-                datetime.today(),
-                datetime.today() + timedelta(days=7),
-                datetime.today() + timedelta(days=14),
+                TODAY,
+                TODAY + timedelta(days=7),
+                TODAY + timedelta(days=14),
             ),
             (
-                datetime.today() + timedelta(days=8),
-                datetime.today(),
-                datetime.today() + timedelta(days=7),
+                TODAY + timedelta(days=8),
+                TODAY,
+                TODAY + timedelta(days=7),
             ),
             (
-                [datetime.today(), datetime.today() + timedelta(2)],
-                datetime.today() + timedelta(days=7),
-                datetime.today() + timedelta(days=14),
+                [TODAY, TODAY + timedelta(2)],
+                TODAY + timedelta(days=7),
+                TODAY + timedelta(days=14),
             ),
             (
-                [datetime.today(), datetime.today() + timedelta(8)],
-                datetime.today() + timedelta(days=7),
-                datetime.today() + timedelta(days=14),
+                [TODAY, TODAY + timedelta(8)],
+                TODAY + timedelta(days=7),
+                TODAY + timedelta(days=14),
             ),
             (
-                [datetime.today(), datetime.today() + timedelta(8)],
-                datetime.today(),
-                datetime.today() + timedelta(days=7),
+                [TODAY, TODAY + timedelta(8)],
+                TODAY,
+                TODAY + timedelta(days=7),
             ),
         ]
     )
@@ -134,35 +183,50 @@ class DateInputTest(DeltaGeneratorTestCase):
 
     @parameterized.expand(
         [
-            (datetime.today(), datetime.today(), datetime.today() + timedelta(days=14)),
+            (TODAY, TODAY, TODAY + timedelta(days=14)),
             (
-                datetime.today() + timedelta(days=14),
-                datetime.today(),
-                datetime.today() + timedelta(days=14),
+                TODAY + timedelta(days=14),
+                TODAY,
+                TODAY + timedelta(days=14),
             ),
             (
-                datetime.today() + timedelta(days=10),
-                datetime.today(),
-                datetime.today() + timedelta(days=14),
+                TODAY + timedelta(days=10),
+                TODAY,
+                TODAY + timedelta(days=14),
             ),
             (
-                [datetime.today() + timedelta(1), datetime.today() + timedelta(2)],
-                datetime.today(),
-                datetime.today() + timedelta(days=14),
+                [TODAY + timedelta(1), TODAY + timedelta(2)],
+                TODAY,
+                TODAY + timedelta(days=14),
             ),
             (
-                [datetime.today(), datetime.today() + timedelta(14)],
-                datetime.today(),
-                datetime.today() + timedelta(days=14),
+                [TODAY, TODAY + timedelta(14)],
+                TODAY,
+                TODAY + timedelta(days=14),
             ),
         ]
     )
     def test_value_in_range(self, value, min_date, max_date):
         st.date_input("the label", value=value, min_value=min_date, max_value=max_date)
+        # No need to assert anything. Testing if not throwing an error.
+
+    def test_default_min_if_today_is_before_min(self):
+        min_date = date(9998, 2, 28)
+        st.date_input("the label", min_value=min_date, max_value=date(9999, 2, 28))
+
+        c = self.get_delta_from_queue().new_element.date_input
+        assert datetime.strptime(c.default[0], "%Y/%m/%d").date() == min_date
+
+    def test_default_max_if_today_is_after_min(self):
+        max_date = date(1001, 2, 28)
+        st.date_input("the label", min_value=date(1000, 2, 28), max_value=max_date)
+
+        c = self.get_delta_from_queue().new_element.date_input
+        assert datetime.strptime(c.default[0], "%Y/%m/%d").date() == max_date
 
     def test_range_session_state(self):
         """Test a range set by session state."""
-        date_range_input = [datetime.today(), datetime.today() + timedelta(2)]
+        date_range_input = [date(2024, 1, 15), date(2024, 1, 15) + timedelta(2)]
         state = st.session_state
         state["date_range"] = date_range_input[:]
 
@@ -171,10 +235,15 @@ class DateInputTest(DeltaGeneratorTestCase):
             key="date_range",
         )
 
+        c = self.get_delta_from_queue().new_element.date_input
+
         assert date_range == date_range_input
 
+        self.assertEqual(c.value, ["2024/01/15", "2024/01/17"])
+        self.assertEqual(c.is_range, True)
+
     def test_inside_column(self):
-        """Test that it works correctly inside of a column."""
+        """Test that it works correctly inside a column."""
         col1, col2 = st.columns(2)
 
         with col1:
@@ -254,3 +323,50 @@ class DateInputTest(DeltaGeneratorTestCase):
         with self.assertRaises(StreamlitAPIException) as ex:
             st.date_input("the label", format=format)
         self.assertTrue(str(ex.exception).startswith("The provided format"))
+
+    def test_shows_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.date_input("the label"))()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)
+
+
+def test_date_input_interaction():
+    """Test interactions with an empty date_input widget."""
+
+    def script():
+        import streamlit as st
+
+        st.date_input("the label", value=None)
+
+    at = AppTest.from_function(script).run()
+    date_input = at.date_input[0]
+    assert date_input.value is None
+
+    # Set the value to a specific date
+    at = date_input.set_value(date(2012, 1, 3)).run()
+    date_input = at.date_input[0]
+    assert date_input.value == date(2012, 1, 3)
+
+    # # Clear the value
+    at = date_input.set_value(None).run()
+    date_input = at.date_input[0]
+    assert date_input.value is None
+
+
+def test_None_session_state_value_retained():
+    def script():
+        import streamlit as st
+
+        if "date_input" not in st.session_state:
+            st.session_state["date_input"] = None
+
+        st.date_input("date_input", key="date_input")
+        st.button("button")
+
+    at = AppTest.from_function(script).run()
+    at = at.button[0].click().run()
+    assert at.date_input[0].value is None

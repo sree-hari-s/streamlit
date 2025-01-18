@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,11 +15,14 @@
  */
 
 import React from "react"
-import { shallow, mount } from "@streamlit/lib/src/test_util"
-import { Text as TextProto } from "@streamlit/lib/src/proto"
-import TextElement, { TextProps } from "./TextElement"
 
-import { InlineTooltipIcon } from "@streamlit/lib/src/components/shared/TooltipIcon"
+import { screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
+import { render } from "@streamlit/lib/src/test_util"
+import { Text as TextProto } from "@streamlit/lib/src/proto"
+
+import TextElement, { TextProps } from "./TextElement"
 
 const getProps = (elementProps: Partial<TextProto> = {}): TextProps => ({
   element: TextProto.create({
@@ -32,18 +35,22 @@ const getProps = (elementProps: Partial<TextProto> = {}): TextProps => ({
 describe("TextElement element", () => {
   it("renders preformatted text as expected", () => {
     const props = getProps()
-    const wrap = shallow(<TextElement {...props} />)
-    expect(wrap).toBeDefined()
-    expect(wrap.text()).toBe("some plain text")
+    render(<TextElement {...props} />)
+
+    const textElement = screen.getByTestId("stText")
+    expect(textElement).toBeInTheDocument()
+    expect(screen.getByText("some plain text")).toBeInTheDocument()
+    expect(textElement).toHaveClass("stText")
   })
 
-  it("renders text with help tooltip", () => {
+  it("renders text with help tooltip", async () => {
     const props = getProps({ help: "help text" })
-    const wrap = mount(<TextElement {...props} />)
-    expect(wrap).toBeDefined()
-    expect(wrap.text()).toBe("some plain text")
-    const inlineTooltipIcon = wrap.find(InlineTooltipIcon)
-    expect(inlineTooltipIcon.exists()).toBeTruthy()
-    expect(inlineTooltipIcon.props().content).toBe("help text")
+    render(<TextElement {...props} />)
+    const tooltip = screen.getByTestId("stTooltipHoverTarget")
+    expect(tooltip).toBeInTheDocument()
+    await userEvent.hover(tooltip)
+
+    const helpText = await screen.findAllByText("help text")
+    expect(helpText[0].textContent).toBe("help text")
   })
 })

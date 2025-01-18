@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,25 @@ const sidebar = 100
 const menuButton = sidebar + 10
 const balloons = 1000000
 const header = balloons - 10
-const chatInput = sidebar - 1
+const bottom = sidebar - 1
 const sidebarMobile = balloons - 5
 const popupMenu = balloons + 40
 const fullscreenWrapper = balloons + 50
+// Vega tooltips should be shown even when used
+// in dialogs or in fullscreen mode
+const vegaTooltips = fullscreenWrapper + 10
 const tablePortal = fullscreenWrapper + 60
+const cacheSpinner = sidebar + 1
+// Toasts should overlap chatInput container
+const toast = bottom + 1
 
 export const zIndices = {
   hide: -1,
   auto: "auto",
   base: 0,
+  // this is used if we want to ensure that an element
+  // is shown above the parent elements.
+  priority: 1,
   sidebar,
   menuButton,
   balloons,
@@ -36,5 +45,8 @@ export const zIndices = {
   popupMenu,
   fullscreenWrapper,
   tablePortal,
-  chatInput,
+  bottom,
+  cacheSpinner,
+  toast,
+  vegaTooltips,
 }

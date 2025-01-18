@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { useLayoutEffect, useMemo, useRef, useCallback } from "react"
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react"
 
 /**
  * Creates a debounced function that delays invoking `fn` until after `ms`
@@ -102,6 +102,8 @@ export default function useScrollSpy(
 
   const debouncer = useMemo(
     () =>
+      // TODO: Update to match React best practices
+      // eslint-disable-next-line react-compiler/react-compiler
       debounce(event => {
         onEventRef.current(event)
       }, DEFAULT_DEBOUNCE_MS),
@@ -109,7 +111,7 @@ export default function useScrollSpy(
   )
 
   const handleEvent = useCallback(
-    event => {
+    (event: any) => {
       event.timeStampLow = Date.now()
 
       debouncer(event)

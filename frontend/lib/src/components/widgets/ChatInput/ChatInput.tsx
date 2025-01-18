@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,13 @@
  */
 
 import React, {
+  ChangeEvent,
+  KeyboardEvent,
   useEffect,
   useRef,
   useState,
-  ChangeEvent,
-  KeyboardEvent,
 } from "react"
+
 import { useTheme } from "@emotion/react"
 import { Send } from "@emotion-icons/material-rounded"
 import { Textarea as UITextArea } from "baseui/textarea"
@@ -29,13 +30,11 @@ import { ChatInput as ChatInputProto } from "@streamlit/lib/src/proto"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 import Icon from "@streamlit/lib/src/components/shared/Icon"
 import InputInstructions from "@streamlit/lib/src/components/shared/InputInstructions/InputInstructions"
-import { hasLightBackgroundColor } from "@streamlit/lib/src/theme"
-import { breakpoints } from "@streamlit/lib/src/theme/primitives"
+import { isEnterKeyPressed } from "@streamlit/lib/src/util/inputUtils"
 
 import {
-  StyledChatInputContainer,
   StyledChatInput,
-  StyledFloatingChatInputContainer,
+  StyledChatInputContainer,
   StyledInputInstructionsContainer,
   StyledSendIconButton,
   StyledSendIconButtonContainer,
@@ -46,6 +45,7 @@ export interface Props {
   element: ChatInputProto
   widgetMgr: WidgetStateManager
   width: number
+  fragmentId?: string
 }
 
 // We want to show easily that there's scrolling so we deliberately choose
@@ -55,21 +55,12 @@ const MAX_VISIBLE_NUM_LINES = 6.5
 // to manage it better.
 const ROUNDING_OFFSET = 1
 
-const isEnterKeyPressed = (
-  event: KeyboardEvent<HTMLTextAreaElement>
-): boolean => {
-  // Using keyCode as well due to some different behaviors on Windows
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=79407
-
-  const { keyCode, key } = event
-  return (
-    (key === "Enter" || keyCode === 13 || keyCode === 10) &&
-    // Do not send the sentence being composed when Enter is typed into the IME.
-    !(event.nativeEvent?.isComposing === true)
-  )
-}
-
-function ChatInput({ width, element, widgetMgr }: Props): React.ReactElement {
+function ChatInput({
+  width,
+  element,
+  widgetMgr,
+  fragmentId,
+}: Props): React.ReactElement {
   const theme = useTheme()
   // True if the user-specified state.value has not yet been synced to the WidgetStateManager.
   const [dirty, setDirty] = useState(false)
@@ -96,11 +87,22 @@ function ChatInput({ width, element, widgetMgr }: Props): React.ReactElement {
   }
 
   const handleSubmit = (): void => {
+    // We want the chat input to always be in focus
+    // even if the user clicks the submit button
+    if (chatInputRef.current) {
+      chatInputRef.current.focus()
+    }
+
     if (!value) {
       return
     }
 
-    widgetMgr.setStringTriggerValue(element, value, { fromUi: true })
+    widgetMgr.setStringTriggerValue(
+      element,
+      value,
+      { fromUi: true },
+      fragmentId
+    )
     setDirty(false)
     setValue("")
     setScrollHeight(0)
@@ -134,6 +136,8 @@ function ChatInput({ width, element, widgetMgr }: Props): React.ReactElement {
   useEffect(() => {
     if (element.setValue) {
       // We are intentionally setting this to avoid regularly calling this effect.
+      // TODO: Update to match React best practices
+      // eslint-disable-next-line react-compiler/react-compiler
       element.setValue = false
       const val = element.value || ""
       setValue(val)
@@ -149,12 +153,8 @@ function ChatInput({ width, element, widgetMgr }: Props): React.ReactElement {
     }
   }, [chatInputRef])
 
-  const { disabled, placeholder, maxChars, position } = element
-  const lightTheme = hasLightBackgroundColor(theme)
+  const { disabled, placeholder, maxChars } = element
   const { minHeight, maxHeight } = heightGuidance.current
-  const placeholderColor = lightTheme
-    ? theme.colors.gray70
-    : theme.colors.gray80
 
   const isInputExtended =
     scrollHeight > 0 && chatInputRef.current
@@ -162,88 +162,93 @@ function ChatInput({ width, element, widgetMgr }: Props): React.ReactElement {
       : false
 
   return (
-    <StyledFloatingChatInputContainer className="stChatFloatingInputContainer">
-      <StyledChatInputContainer
-        className="stChatInputContainer"
-        width={width}
-        position={position}
-      >
-        <StyledChatInput>
-          <UITextArea
-            inputRef={chatInputRef}
-            value={value}
-            placeholder={placeholder}
-            onChange={handleChange}
-            onKeyDown={handleKeyDown}
-            aria-label={placeholder}
-            disabled={disabled}
-            rows={1}
-            overrides={{
-              Root: {
-                style: {
-                  outline: "none",
-                  backgroundColor: theme.colors.transparent,
-                  // Baseweb requires long-hand props, short-hand leads to weird bugs & warnings.
-                  borderLeftWidth: "1px",
-                  borderRightWidth: "1px",
-                  borderTopWidth: "1px",
-                  borderBottomWidth: "1px",
-                  width: `${width}px`,
-                },
+    <StyledChatInputContainer
+      className="stChatInput"
+      data-testid="stChatInput"
+      width={width}
+    >
+      <StyledChatInput>
+        <UITextArea
+          inputRef={chatInputRef}
+          value={value}
+          placeholder={placeholder}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          aria-label={placeholder}
+          disabled={disabled}
+          rows={1}
+          overrides={{
+            Root: {
+              style: {
+                minHeight: theme.sizes.minElementHeight,
+                outline: "none",
+                backgroundColor: theme.colors.transparent,
+                // Baseweb requires long-hand props, short-hand leads to weird bugs & warnings.
+                borderRadius: theme.radii.xxxl,
+                borderLeftWidth: theme.sizes.borderWidth,
+                borderRightWidth: theme.sizes.borderWidth,
+                borderTopWidth: theme.sizes.borderWidth,
+                borderBottomWidth: theme.sizes.borderWidth,
+                width: `${width}px`,
               },
-              InputContainer: {
-                style: {
-                  backgroundColor: theme.colors.transparent,
-                },
+            },
+            InputContainer: {
+              style: {
+                backgroundColor: theme.colors.transparent,
               },
-              Input: {
-                props: {
-                  "data-testid": "stChatInput",
-                },
-                style: {
-                  lineHeight: "1.4",
-                  backgroundColor: theme.colors.transparent,
-                  "::placeholder": {
-                    color: placeholderColor,
-                  },
-                  height: isInputExtended
-                    ? `${scrollHeight + ROUNDING_OFFSET}px`
-                    : "auto",
-                  maxHeight: maxHeight ? `${maxHeight}px` : "none",
-                  // Baseweb requires long-hand props, short-hand leads to weird bugs & warnings.
-                  paddingRight: "3rem",
-                  paddingLeft: theme.spacing.sm,
-                  paddingBottom: theme.spacing.sm,
-                  paddingTop: theme.spacing.sm,
-                },
+            },
+            Input: {
+              props: {
+                "data-testid": "stChatInputTextArea",
               },
-            }}
-          />
-          {/* Hide the character limit in small widget sizes */}
-          {width > breakpoints.hideWidgetDetails && (
-            <StyledInputInstructionsContainer>
-              <InputInstructions
-                dirty={dirty}
-                value={value}
-                maxLength={maxChars}
-                type="chat"
-                // Chat Input are not able to be used in forms
-                inForm={false}
-              />
-            </StyledInputInstructionsContainer>
-          )}
-          <StyledSendIconButtonContainer>
-            <StyledSendIconButton
-              onClick={handleSubmit}
-              disabled={!dirty || disabled}
-              extended={isInputExtended}
-            >
-              <Icon content={Send} size="xl" color="inherit" />
-            </StyledSendIconButton>
-          </StyledSendIconButtonContainer>
-        </StyledChatInput>
-      </StyledChatInputContainer>
-    </StyledFloatingChatInputContainer>
+              style: {
+                lineHeight: theme.lineHeights.inputWidget,
+                backgroundColor: theme.colors.transparent,
+                // Disable resizing via drag and drop
+                resize: "none",
+                "::placeholder": {
+                  opacity: "0.7",
+                },
+                height: isInputExtended
+                  ? `${scrollHeight + ROUNDING_OFFSET}px`
+                  : "auto",
+                maxHeight: maxHeight ? `${maxHeight}px` : "none",
+                // Baseweb requires long-hand props, short-hand leads to weird bugs & warnings.
+                paddingLeft: theme.spacing.lg,
+                paddingBottom: theme.spacing.sm,
+                paddingTop: theme.spacing.sm,
+                // Calculate the right padding to account for the send icon (iconSizes.xl + 2 * spacing.sm)
+                // and some additional margin between the icon and the text (spacing.sm).
+                paddingRight: `calc(${theme.iconSizes.xl} + 2 * ${theme.spacing.sm} + ${theme.spacing.sm})`,
+              },
+            },
+          }}
+        />
+        {/* Hide the character limit in small widget sizes */}
+        {width > theme.breakpoints.hideWidgetDetails && (
+          <StyledInputInstructionsContainer>
+            <InputInstructions
+              dirty={dirty}
+              value={value}
+              maxLength={maxChars}
+              type="chat"
+              // Chat Input are not able to be used in forms
+              inForm={false}
+            />
+          </StyledInputInstructionsContainer>
+        )}
+        <StyledSendIconButtonContainer>
+          <StyledSendIconButton
+            onClick={handleSubmit}
+            disabled={!dirty || disabled}
+            extended={isInputExtended}
+            data-testid="stChatInputSubmitButton"
+          >
+            <Icon content={Send} size="xl" color="inherit" />
+          </StyledSendIconButton>
+        </StyledSendIconButtonContainer>
+      </StyledChatInput>
+    </StyledChatInputContainer>
   )
 }
 

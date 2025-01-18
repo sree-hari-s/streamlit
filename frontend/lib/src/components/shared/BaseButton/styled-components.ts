@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,22 +15,32 @@
  */
 
 import { MouseEvent, ReactNode } from "react"
+
 import styled, { CSSObject } from "@emotion/styled"
 import { darken, transparentize } from "color2k"
+
 import { EmotionTheme } from "@streamlit/lib/src/theme"
 
 export enum BaseButtonKind {
   PRIMARY = "primary",
   SECONDARY = "secondary",
   TERTIARY = "tertiary",
+  GHOST = "ghost",
   LINK = "link",
   ICON = "icon",
   BORDERLESS_ICON = "borderlessIcon",
+  BORDERLESS_ICON_ACTIVE = "borderlessIconActive",
   MINIMAL = "minimal",
   PRIMARY_FORM_SUBMIT = "primaryFormSubmit",
   SECONDARY_FORM_SUBMIT = "secondaryFormSubmit",
+  TERTIARY_FORM_SUBMIT = "tertiaryFormSubmit",
   HEADER_BUTTON = "header",
   HEADER_NO_PADDING = "headerNoPadding",
+  ELEMENT_TOOLBAR = "elementToolbar",
+  PILLS = "pills",
+  PILLS_ACTIVE = "pillsActive",
+  SEGMENTED_CONTROL = "segmented_control",
+  SEGMENTED_CONTROL_ACTIVE = "segmented_controlActive",
 }
 
 export enum BaseButtonSize {
@@ -49,6 +59,8 @@ export interface BaseButtonProps {
   fluidWidth?: boolean | number
   children: ReactNode
   autoFocus?: boolean
+  "data-testid"?: string
+  "aria-label"?: string
 }
 
 type RequiredBaseButtonProps = Required<BaseButtonProps>
@@ -86,12 +98,16 @@ export const StyledBaseButton = styled.button<RequiredBaseButtonProps>(
       justifyContent: "center",
       fontWeight: theme.fontWeights.normal,
       padding: `${theme.spacing.xs} ${theme.spacing.md}`,
-      borderRadius: theme.radii.lg,
-      minHeight: "38.4px",
-      margin: 0,
+      borderRadius: theme.radii.default,
+      minHeight: theme.sizes.minElementHeight,
+      margin: theme.spacing.none,
       lineHeight: theme.lineHeights.base,
+      textTransform: "none",
+      fontSize: "inherit",
+      fontFamily: "inherit",
       color: "inherit",
       width: fluidWidth ? buttonWidth : "auto",
+      cursor: "pointer",
       userSelect: "none",
       "&:focus": {
         outline: "none",
@@ -109,7 +125,7 @@ export const StyledPrimaryButton = styled(
 )<RequiredBaseButtonProps>(({ theme }) => ({
   backgroundColor: theme.colors.primary,
   color: theme.colors.white,
-  border: `1px solid ${theme.colors.primary}`,
+  border: `${theme.sizes.borderWidth} solid ${theme.colors.primary}`,
   "&:hover": {
     backgroundColor: darken(theme.colors.primary, 0.05),
   },
@@ -118,7 +134,7 @@ export const StyledPrimaryButton = styled(
     color: theme.colors.primary,
   },
   "&:disabled, &:disabled:hover, &:disabled:active": {
-    borderColor: theme.colors.fadedText10,
+    borderColor: theme.colors.borderColor,
     backgroundColor: theme.colors.transparent,
     color: theme.colors.fadedText40,
     cursor: "not-allowed",
@@ -129,7 +145,7 @@ export const StyledSecondaryButton = styled(
   StyledBaseButton
 )<RequiredBaseButtonProps>(({ theme }) => ({
   backgroundColor: theme.colors.lightenedBg05,
-  border: `1px solid ${theme.colors.fadedText10}`,
+  border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
   "&:hover": {
     borderColor: theme.colors.primary,
     color: theme.colors.primary,
@@ -144,7 +160,7 @@ export const StyledSecondaryButton = styled(
     color: theme.colors.primary,
   },
   "&:disabled, &:disabled:hover, &:disabled:active": {
-    borderColor: theme.colors.fadedText10,
+    borderColor: theme.colors.borderColor,
     backgroundColor: theme.colors.transparent,
     color: theme.colors.fadedText40,
     cursor: "not-allowed",
@@ -153,9 +169,38 @@ export const StyledSecondaryButton = styled(
 
 export const StyledTertiaryButton = styled(
   StyledBaseButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    padding: theme.spacing.none,
+    backgroundColor: theme.colors.transparent,
+    border: "none",
+
+    "&:active": {
+      color: theme.colors.primary,
+    },
+    "&:focus": {
+      outline: "none",
+    },
+    "&:focus-visible": {
+      color: theme.colors.primary,
+      boxShadow: `0 0 0 0.2rem ${transparentize(theme.colors.primary, 0.5)}`,
+    },
+    "&:hover": {
+      color: theme.colors.primary,
+    },
+    "&:disabled, &:disabled:hover, &:disabled:active": {
+      backgroundColor: theme.colors.transparent,
+      color: theme.colors.fadedText40,
+      cursor: "not-allowed",
+    },
+  }
+})
+
+export const StyledGhostButton = styled(
+  StyledBaseButton
 )<RequiredBaseButtonProps>(({ theme }) => ({
   backgroundColor: theme.colors.transparent,
-  border: `1px solid ${theme.colors.transparent}`,
+  border: `${theme.sizes.borderWidth} solid ${theme.colors.transparent}`,
   "&:hover": {
     borderColor: theme.colors.transparent,
     color: theme.colors.primary,
@@ -180,7 +225,7 @@ export const StyledLinkButton = styled(
   StyledBaseButton
 )<RequiredBaseButtonProps>(({ theme }) => ({
   backgroundColor: theme.colors.transparent,
-  padding: 0,
+  padding: theme.spacing.none,
   border: "none",
   color: theme.colors.primary,
   "&:hover": {
@@ -204,7 +249,7 @@ export const StyledMinimalButton = styled(
   backgroundColor: theme.colors.transparent,
   border: "none",
   boxShadow: "none",
-  padding: 0,
+  padding: theme.spacing.none,
   "&:hover, &:active, &:focus-visible": {
     color: theme.colors.primary,
   },
@@ -217,19 +262,18 @@ export const StyledSecondaryFormSubmitButton = styled(
   StyledSecondaryButton
 )<RequiredBaseButtonProps>()
 
+export const StyledTertiaryFormSubmitButton = styled(
+  StyledTertiaryButton
+)<RequiredBaseButtonProps>()
+
 export const StyledIconButton = styled(
   StyledBaseButton
-)<RequiredBaseButtonProps>(({ size, theme }) => {
-  const iconPadding: Record<BaseButtonSize, string> = {
-    [BaseButtonSize.XSMALL]: theme.spacing.threeXS,
-    [BaseButtonSize.SMALL]: theme.spacing.twoXS,
-    [BaseButtonSize.MEDIUM]: theme.spacing.md,
-    [BaseButtonSize.LARGE]: theme.spacing.lg,
-  }
+)<RequiredBaseButtonProps>(({ theme }) => {
   return {
     backgroundColor: theme.colors.transparent,
-    border: `1px solid ${theme.colors.transparent}`,
-    padding: iconPadding[size],
+    border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
+    flex: "1 1 0",
+    padding: 0,
 
     "&:hover": {
       borderColor: theme.colors.primary,
@@ -247,6 +291,126 @@ export const StyledIconButton = styled(
       backgroundColor: theme.colors.lightGray,
       borderColor: theme.colors.transparent,
       color: theme.colors.gray,
+      cursor: "not-allowed",
+    },
+  }
+})
+
+export const StyledIconButtonActive = styled(
+  StyledIconButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    color: theme.colors.white,
+    "&:hover": {
+      backgroundColor: theme.colors.transparent,
+      borderColor: theme.colors.primary,
+      color: theme.colors.primary,
+    },
+  }
+})
+
+const StyledButtonGroupBaseButton = styled(
+  StyledBaseButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    background: theme.colors.bgColor,
+    color: theme.colors.text,
+    border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
+    fontSize: theme.fontSizes.sm,
+    lineHeight: theme.lineHeights.base,
+    fontWeight: theme.fontWeights.normal,
+    height: theme.sizes.largeLogoHeight,
+    minHeight: theme.sizes.largeLogoHeight,
+    maxWidth: theme.sizes.contentMaxWidth,
+
+    // show pills with long text in single line and use ellipsis for overflow
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+
+    "&:hover": {
+      borderColor: theme.colors.primary,
+      color: theme.colors.primary,
+    },
+    "&:disabled, &:disabled:hover, &:disabled:active": {
+      color: theme.colors.fadedText20,
+      borderColor: theme.colors.fadedText20,
+      cursor: "not-allowed",
+    },
+
+    "& div": {
+      textOverflow: "ellipsis",
+      overflow: "hidden",
+    },
+    "& p": {
+      fontSize: theme.fontSizes.sm,
+      textOverflow: "ellipsis",
+      overflow: "hidden",
+    },
+  }
+})
+
+export const StyledPillsButton = styled(
+  StyledButtonGroupBaseButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    borderRadius: theme.radii.full,
+    padding: `${theme.spacing.twoXS} ${theme.spacing.md}`,
+  }
+})
+
+export const StyledPillsButtonActive = styled(
+  StyledPillsButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    backgroundColor: transparentize(theme.colors.primary, 0.9),
+    borderColor: theme.colors.primary,
+    color: theme.colors.primary,
+    "&:hover": {
+      backgroundColor: transparentize(theme.colors.primary, 0.8),
+      borderColor: theme.colors.primary,
+      color: theme.colors.primary,
+    },
+  }
+})
+
+export const StyledSegmentedControlButton = styled(
+  StyledButtonGroupBaseButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    padding: `${theme.spacing.twoXS} ${theme.spacing.lg}`,
+    borderRadius: "0",
+    flex: "1 0 fit-content",
+    maxWidth: "100%",
+    marginRight: `-${theme.sizes.borderWidth}`, // Add negative margin to overlap borders
+
+    "&:first-child": {
+      borderTopLeftRadius: theme.radii.default,
+      borderBottomLeftRadius: theme.radii.default,
+    },
+    "&:last-child": {
+      borderTopRightRadius: theme.radii.default,
+      borderBottomRightRadius: theme.radii.default,
+      marginRight: theme.spacing.none, // Reset margin for the last child
+    },
+    "&:hover": {
+      zIndex: theme.zIndices.priority, // Make sure overlapped borders are visible
+    },
+  }
+})
+
+export const StyledSegmentedControlButtonActive = styled(
+  StyledSegmentedControlButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    backgroundColor: transparentize(theme.colors.primary, 0.9),
+    borderColor: theme.colors.primary,
+    color: theme.colors.primary,
+    zIndex: theme.zIndices.priority,
+    "&:hover": {
+      backgroundColor: transparentize(theme.colors.primary, 0.8),
     },
   }
 })
@@ -261,7 +425,8 @@ export const StyledHeaderButton = styled(
     fontSize: theme.fontSizes.sm,
     marginLeft: theme.spacing.threeXS,
     marginRight: theme.spacing.threeXS,
-    lineHeight: 1,
+
+    lineHeight: theme.lineHeights.none,
 
     // Override buttons min width and height, to ensure the hover state for icon buttons on the header is square
     minWidth: theme.spacing.threeXL,
@@ -305,17 +470,41 @@ export const StyledBorderlessIconButton = styled(
 
   return {
     backgroundColor: theme.colors.transparent,
-    border: `1px solid ${theme.colors.transparent}`,
+    color: theme.colors.fadedText60,
     padding: iconPadding[size],
+    marginLeft: theme.spacing.none,
+    marginRight: theme.spacing.none,
+
+    border: "none",
+    display: "flex",
+    minHeight: "unset",
 
     "&:focus": {
       boxShadow: "none",
       outline: "none",
     },
+    "&:hover": {
+      color: theme.colors.text,
+    },
     "&:disabled, &:disabled:hover, &:disabled:active": {
-      backgroundColor: theme.colors.lightGray,
-      borderColor: theme.colors.transparent,
-      color: theme.colors.gray,
+      color: theme.colors.fadedText10,
+      cursor: "not-allowed",
+
+      // For image content
+      img: {
+        opacity: 0.4,
+      },
+    },
+  }
+})
+
+export const StyledBorderlessIconButtonActive = styled(
+  StyledBorderlessIconButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    color: theme.colors.bodyText,
+    "&:disabled, &:disabled:hover, &:disabled:active": {
+      color: theme.colors.fadedText40,
     },
   }
 })
@@ -333,3 +522,42 @@ export const StyledTooltipMobile = styled.div(({ theme }) => ({
     display: "block",
   },
 }))
+
+export const StyledElementToolbarButton = styled(
+  StyledBaseButton
+)<RequiredBaseButtonProps>(({ theme }) => {
+  return {
+    backgroundColor: theme.colors.transparent,
+    border: "none",
+    padding: theme.spacing.xs,
+    fontSize: theme.fontSizes.twoSm,
+    marginLeft: theme.spacing.none,
+    marginRight: theme.spacing.none,
+    display: "flex",
+    gap: theme.spacing.xs,
+    alignItems: "center",
+    minHeight: "unset",
+    // line height should be the same as the icon size
+    lineHeight: theme.iconSizes.md,
+
+    "&:focus": {
+      outline: "none",
+      border: "none",
+      boxShadow: "none",
+    },
+    "&:focus-visible": {
+      outline: "none",
+      border: "none",
+      boxShadow: "none",
+      backgroundColor: theme.colors.darkenedBgMix25,
+    },
+    "&:hover": {
+      backgroundColor: theme.colors.darkenedBgMix25,
+    },
+    "&:disabled, &:disabled:hover, &:disabled:active": {
+      backgroundColor: theme.colors.lightGray,
+      borderColor: theme.colors.transparent,
+      color: theme.colors.gray,
+    },
+  }
+})

@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,18 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 from parameterized import parameterized
 
 from streamlit import string_util
+from streamlit.errors import StreamlitAPIException
 
 
 class StringUtilTest(unittest.TestCase):
-    def test_decode_ascii(self):
-        """Test streamlit.string_util.decode_ascii."""
-        self.assertEqual("test string.", string_util.decode_ascii(b"test string."))
-
     @parameterized.expand(
         [
             ("", False),
@@ -66,6 +65,29 @@ class StringUtilTest(unittest.TestCase):
     def test_extract_leading_emoji(self, text, expected):
         self.assertEqual(string_util.extract_leading_emoji(text), expected)
 
+    @parameterized.expand(
+        [
+            ("A", False),
+            ("hello", False),
+            ("1_foo", False),
+            ("1.foo", False),
+            ("1-foo", False),
+            ("foo bar", False),
+            ("foo.bar", False),
+            ("foo&bar", False),
+            ("", False),
+            ("a 😃bc", True),
+            ("X😃", True),
+            ("%", True),
+            ("😃", True),
+            ("😃 page name", True),
+            ("👨‍👨‍👧‍👦_page name", True),
+            ("何_is_this", True),
+        ]
+    )
+    def test_contains_special_chars(self, text: str, expected: bool):
+        self.assertEqual(string_util._contains_special_chars(text), expected)
+
     def test_simplify_number(self):
         """Test streamlit.string_util.simplify_number."""
 
@@ -78,3 +100,51 @@ class StringUtilTest(unittest.TestCase):
         self.assertEqual(string_util.simplify_number(1000000000), "1b")
 
         self.assertEqual(string_util.simplify_number(1000000000000), "1t")
+
+    @parameterized.expand(
+        [
+            ("", "`", 0),
+            ("`", "`", 1),
+            ("a", "`", 0),
+            ("``", "`", 2),
+            ("aba", "a", 1),
+            ("a``a", "`", 2),
+            ("```abc```", "`", 3),
+            ("a`b``c```d", "`", 3),
+            ("``````", "`", 6),
+            (
+                "a`b`c`d`e",
+                "`",
+                1,
+            ),
+            ("a``b```c````d", "`", 4),
+            ("no backticks here", "`", 0),
+        ]
+    )
+    def test_max_char_sequence(self, text, char, expected):
+        self.assertEqual(string_util.max_char_sequence(text, char), expected)
+
+    @parameterized.expand(
+        [
+            ":material/cabin:",
+            ":material/add_circle:",
+            ":material/add_a_photo:",
+        ]
+    )
+    def test_validate_material_icons_success(self, icon_string: str):
+        """Test that validate_material_icons not raises exception on correct icons."""
+        string_util.validate_material_icon(icon_string)
+
+    @parameterized.expand(
+        [
+            ":material/cabBbin:",
+            ":material-outlined/add_circle:",
+            ":material:add_a_photo:",
+        ]
+    )
+    def test_validate_material_icons_raises_exception(self, icon_name):
+        """Test that validate_material_icons raises exception on incorrect icons."""
+        with self.assertRaises(StreamlitAPIException) as e:
+            string_util.validate_material_icon(icon_name)
+
+        self.assertIn("not a valid Material icon.", str(e.exception))

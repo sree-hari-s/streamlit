@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,19 @@
  * limitations under the License.
  */
 
+import decamelize from "decamelize"
+import get from "lodash/get"
+import xxhash from "xxhashjs"
+
 import {
   Alert as AlertProto,
-  LabelVisibilityMessage as LabelVisibilityMessageProto,
   Element,
+  LabelVisibilityMessage as LabelVisibilityMessageProto,
+  Skeleton as SkeletonProto,
 } from "@streamlit/lib/src/proto"
-import _ from "lodash"
-import xxhash from "xxhashjs"
+
+// This prefix should be in sync with the value on the python side:
+const GENERATED_ELEMENT_ID_PREFIX = "$$ID"
 
 /**
  * Wraps a function to allow it to be called, at most, once per interval
@@ -53,20 +59,30 @@ export const EMBED_SHOW_COLORED_LINE = "show_colored_line"
 export const EMBED_SHOW_TOOLBAR = "show_toolbar"
 export const EMBED_SHOW_PADDING = "show_padding"
 export const EMBED_DISABLE_SCROLLING = "disable_scrolling"
-export const EMBED_SHOW_FOOTER = "show_footer"
 export const EMBED_LIGHT_THEME = "light_theme"
 export const EMBED_DARK_THEME = "dark_theme"
 export const EMBED_TRUE = "true"
+export const EMBED_HIDE_LOADING_SCREEN = "hide_loading_screen"
+export const EMBED_SHOW_LOADING_SCREEN_V1 = "show_loading_screen_v1"
+export const EMBED_SHOW_LOADING_SCREEN_V2 = "show_loading_screen_v2"
 export const EMBED_QUERY_PARAM_VALUES = [
   EMBED_SHOW_COLORED_LINE,
   EMBED_SHOW_TOOLBAR,
   EMBED_SHOW_PADDING,
   EMBED_DISABLE_SCROLLING,
-  EMBED_SHOW_FOOTER,
   EMBED_LIGHT_THEME,
   EMBED_DARK_THEME,
+  EMBED_HIDE_LOADING_SCREEN,
+  EMBED_SHOW_LOADING_SCREEN_V1,
+  EMBED_SHOW_LOADING_SCREEN_V2,
   EMBED_TRUE,
 ]
+
+export enum LoadingScreenType {
+  NONE,
+  V1,
+  V2,
+}
 
 /**
  * Returns list of defined in EMBED_QUERY_PARAM_VALUES url params of given key
@@ -86,6 +102,31 @@ export function getEmbedUrlParams(embedKey: string): Set<string> {
     }
   })
   return embedUrlParams
+}
+
+/**
+ * Returns "embed" and "embed_options" query param options in the url. Returns empty string if not embedded.
+ * Example:
+ *  returns "embed=true&embed_options=show_loading_screen_v2" if the url is
+ *  http://localhost:3000/test?embed=true&embed_options=show_loading_screen_v2
+ */
+export function preserveEmbedQueryParams(): string {
+  if (!isEmbed()) {
+    return ""
+  }
+
+  const embedOptionsValues = new URLSearchParams(
+    window.location.search
+  ).getAll(EMBED_OPTIONS_QUERY_PARAM_KEY)
+
+  // instantiate multiple key values with an array of string pairs
+  // https://stackoverflow.com/questions/72571132/urlsearchparams-with-multiple-values
+  const embedUrlMap: string[][] = []
+  embedUrlMap.push([EMBED_QUERY_PARAM_KEY, EMBED_TRUE])
+  embedOptionsValues.forEach((embedValue: string) => {
+    embedUrlMap.push([EMBED_OPTIONS_QUERY_PARAM_KEY, embedValue])
+  })
+  return new URLSearchParams(embedUrlMap).toString()
 }
 
 /**
@@ -121,18 +162,11 @@ export function isToolbarDisplayed(): boolean {
  * Returns true if the URL parameters contain ?embed=true&embed_options=disable_scrolling (case insensitive).
  */
 export function isScrollingHidden(): boolean {
-  return getEmbedUrlParams(EMBED_OPTIONS_QUERY_PARAM_KEY).has(
-    EMBED_DISABLE_SCROLLING
-  )
-}
-
-/**
- * Returns true if the URL parameters contain ?embed=true&embed_options=show_footer (case insensitive).
- */
-export function isFooterDisplayed(): boolean {
   return (
     isEmbed() &&
-    getEmbedUrlParams(EMBED_OPTIONS_QUERY_PARAM_KEY).has(EMBED_SHOW_FOOTER)
+    getEmbedUrlParams(EMBED_OPTIONS_QUERY_PARAM_KEY).has(
+      EMBED_DISABLE_SCROLLING
+    )
   )
 }
 
@@ -149,7 +183,9 @@ export function isPaddingDisplayed(): boolean {
 /**
  * Returns true if the URL parameters contain ?embed_options=light_theme (case insensitive).
  */
-export function isLightTheme(): boolean {
+export function isLightThemeInQueryParams(): boolean {
+  // NOTE: We don't check for ?embed=true here, because we want to allow display without any
+  // other embed options (for example in our e2e tests).
   return getEmbedUrlParams(EMBED_OPTIONS_QUERY_PARAM_KEY).has(
     EMBED_LIGHT_THEME
   )
@@ -158,7 +194,9 @@ export function isLightTheme(): boolean {
 /**
  * Returns true if the URL parameters contain ?embed_options=dark_theme (case insensitive).
  */
-export function isDarkTheme(): boolean {
+export function isDarkThemeInQueryParams(): boolean {
+  // NOTE: We don't check for ?embed=true here, because we want to allow display without any
+  // other embed options (for example in our e2e tests).
   return getEmbedUrlParams(EMBED_OPTIONS_QUERY_PARAM_KEY).has(EMBED_DARK_THEME)
 }
 
@@ -167,6 +205,20 @@ export function isDarkTheme(): boolean {
  */
 export function isInChildFrame(): boolean {
   return window.parent !== window
+}
+
+/**
+ * Returns a string with the type of loading screen to use while the app is
+ * waiting for the backend to send displayable protos.
+ */
+export function getLoadingScreenType(): LoadingScreenType {
+  const params = getEmbedUrlParams(EMBED_OPTIONS_QUERY_PARAM_KEY)
+
+  return params.has(EMBED_HIDE_LOADING_SCREEN)
+    ? LoadingScreenType.NONE
+    : params.has(EMBED_SHOW_LOADING_SCREEN_V1)
+    ? LoadingScreenType.V1
+    : LoadingScreenType.V2
 }
 
 /** Return an info Element protobuf with the given text. */
@@ -189,6 +241,13 @@ export function makeElementWithErrorText(text: string): Element {
   })
 }
 
+/** Return a special internal-only Element showing an app "skeleton". */
+export function makeAppSkeletonElement(): Element {
+  return new Element({
+    skeleton: { style: SkeletonProto.SkeletonStyle.APP },
+  })
+}
+
 /**
  * A helper function to hash a string using xxHash32 algorithm.
  * Seed used: 0xDEADBEEF
@@ -202,7 +261,7 @@ export function hashString(s: string): string {
  * if the value is null or undefined.
  */
 export function requireNonNull<T>(obj: T | null | undefined): T {
-  if (obj == null) {
+  if (isNullOrUndefined(obj)) {
     throw new Error("value is null")
   }
   return obj
@@ -219,7 +278,7 @@ export function notUndefined<T>(value: T | undefined): value is T {
  * A type predicate that is true if the given value is not null.
  */
 export function notNull<T>(value: T | null): value is T {
-  return value != null
+  return notNullOrUndefined(value)
 }
 
 /**
@@ -287,14 +346,34 @@ export function setCookie(
   document.cookie = `${name}=${value};${expirationStr}path=/`
 }
 
-/** Return an Element's widget ID if it's a widget, and undefined otherwise. */
-export function getElementWidgetID(element: Element): string | undefined {
-  return _.get(element as any, [requireNonNull(element.type), "id"])
+export function isValidElementId(
+  elementId: string | undefined | null
+): boolean {
+  if (!elementId) {
+    return false
+  }
+  return (
+    elementId.startsWith(GENERATED_ELEMENT_ID_PREFIX) &&
+    // There must be at least 3 parts: $$ID-<hash>-<userKey>
+    elementId.split("-").length >= 3
+  )
+}
+
+/**
+ * If the element has a valid ID, returns it. Otherwise, returns undefined.
+ */
+export function getElementId(element: Element): string | undefined {
+  const elementId = get(element as any, [requireNonNull(element.type), "id"])
+  if (elementId && isValidElementId(elementId)) {
+    // We only care about valid element IDs (with the correct prefix)
+    return elementId
+  }
+  return undefined
 }
 
 /** True if the given form ID is non-null and non-empty. */
 export function isValidFormId(formId?: string): formId is string {
-  return formId != null && formId.length > 0
+  return notNullOrUndefined(formId) && formId.length > 0
 }
 
 /** True if the given widget element is part of a form. */
@@ -446,4 +525,48 @@ export function extractPageNameFromPathName(
       .replace(new RegExp("^/?"), "")
       .replace(new RegExp("/$"), "")
   )
+}
+
+/**
+ * Converts object keys from camelCase to snake_case, applied recursively to nested objects and arrays.
+ * Keys containing dots are replaced with underscores. The conversion preserves consecutive uppercase letters.
+ *
+ * @param obj - The input object with keys to be converted. Can include nested objects and arrays.
+ * @returns A new object with all keys in snake_case, maintaining the original structure and values.
+ *
+ * @example
+ * keysToSnakeCase({
+ *   userId: 1,
+ *   user.Info: { firstName: "John", lastName: "Doe" },
+ *   userActivities: [{ loginTime: "10AM", logoutTime: "5PM" }]
+ * });
+ * // Returns:
+ * // {
+ * //   user_id: 1,
+ * //   user_info: { first_name: "John", last_name: "Doe" },
+ * //   user_activities: [{ login_time: "10AM", logout_time: "5PM" }]
+ * // }
+ */
+export function keysToSnakeCase(
+  obj: Record<string, any>
+): Record<string, any> {
+  return Object.keys(obj).reduce((acc, key) => {
+    const newKey = decamelize(key, {
+      preserveConsecutiveUppercase: true,
+    }).replace(".", "_")
+    let value = obj[key]
+
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      value = keysToSnakeCase(value)
+    }
+
+    if (Array.isArray(value)) {
+      value = value.map(item =>
+        typeof item === "object" ? keysToSnakeCase(item) : item
+      )
+    }
+
+    acc[newKey] = value
+    return acc
+  }, {} as Record<string, any>)
 }

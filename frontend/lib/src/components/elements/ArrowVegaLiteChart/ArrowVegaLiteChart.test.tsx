@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,216 +15,62 @@
  */
 
 import React from "react"
-import { mount } from "@streamlit/lib/src/test_util"
-import {
-  CATEGORICAL,
-  DATETIME,
-  FLOAT64,
-  INT64,
-  UINT64,
-  RANGE,
-  UNICODE,
-  VEGA_LITE,
-} from "@streamlit/lib/src/mocks/arrow"
-import { Quiver } from "@streamlit/lib/src/dataframes/Quiver"
-import { mockTheme } from "@streamlit/lib/src/mocks/mockTheme"
-import {
-  PropsWithHeight,
-  ArrowVegaLiteChart,
-  getDataArray,
-} from "./ArrowVegaLiteChart"
 
-const MOCK = {
-  datasets: [],
-  data: new Quiver({
-    data: VEGA_LITE,
-  }),
-  spec: JSON.stringify({
-    mark: "circle",
-    encoding: {
-      x: { field: "a", type: "quantitative" },
-      y: { field: "b", type: "quantitative" },
-      size: { field: "c", type: "quantitative" },
-      color: { field: "c", type: "quantitative" },
-    },
-  }),
-  useContainerWidth: true,
-  vegaLiteTheme: "",
-}
+import { screen } from "@testing-library/react"
 
-const getProps = (props: Partial<PropsWithHeight> = {}): PropsWithHeight => ({
-  element: MOCK,
+import { render } from "@streamlit/lib/src/test_util"
+import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
+
+import ArrowVegaLiteChart, { Props } from "./ArrowVegaLiteChart"
+import { VegaLiteChartElement } from "./arrowUtils"
+
+const getProps = (
+  elementProps: Partial<VegaLiteChartElement> = {},
+  props: Partial<Props> = {}
+): Props => ({
+  element: {
+    data: null,
+    id: "1",
+    useContainerWidth: false,
+    datasets: [],
+    selectionMode: [],
+    formId: "",
+    spec: JSON.stringify({
+      data: {
+        values: [
+          { category: "A", group: "x", value: 0.1 },
+          { category: "A", group: "y", value: 0.6 },
+          { category: "A", group: "z", value: 0.9 },
+          { category: "B", group: "x", value: 0.7 },
+          { category: "B", group: "y", value: 0.2 },
+          { category: "B", group: "z", value: 1.1 },
+          { category: "C", group: "x", value: 0.6 },
+          { category: "C", group: "y", value: 0.1 },
+          { category: "C", group: "z", value: 0.2 },
+        ],
+      },
+      mark: "bar",
+      encoding: {
+        x: { field: "category" },
+        y: { field: "value", type: "quantitative" },
+      },
+    }),
+    vegaLiteTheme: "streamlit",
+    ...elementProps,
+  },
   width: 0,
-  height: 0,
-  theme: mockTheme.emotion,
+  widgetMgr: new WidgetStateManager({
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
+  }),
   ...props,
 })
 
-describe("VegaLiteChart Element", () => {
+describe("ArrowVegaLiteChart", () => {
   it("renders without crashing", () => {
-    const props = getProps()
-    const wrapper = mount(<ArrowVegaLiteChart {...props} />)
-
-    expect(wrapper.find("StyledVegaLiteChartContainer").length).toBe(1)
-  })
-
-  it("pulls default config values from theme", () => {
-    const props = getProps({ theme: mockTheme.emotion })
-
-    const wrapper = mount(<ArrowVegaLiteChart {...props} />)
-    // @ts-expect-error
-    const generatedSpec = wrapper.instance().generateSpec()
-
-    expect(generatedSpec.config.background).toBe(
-      mockTheme.emotion.colors.bgColor
-    )
-    expect(generatedSpec.config.axis.labelColor).toBe(
-      mockTheme.emotion.colors.bodyText
-    )
-  })
-
-  it("applies Steramlit theme if specified", () => {
-    const props = getProps({
-      element: {
-        ...MOCK,
-        vegaLiteTheme: "streamlit",
-        spec: JSON.stringify({
-          mark: "circle",
-          encoding: {
-            x: { field: "a", type: "quantitative" },
-            y: { field: "b", type: "quantitative" },
-            size: { field: "c", type: "quantitative" },
-            color: { field: "c", type: "quantitative" },
-          },
-        }),
-      },
-    })
-
-    const wrapper = mount(<ArrowVegaLiteChart {...props} />)
-    // @ts-expect-error
-    const generatedSpec = wrapper.instance().generateSpec()
-    // Should have 10 colors defined in range.diverging
-    expect(generatedSpec.config.range?.diverging?.length).toBe(10)
-  })
-
-  it("has user specified config take priority", () => {
-    const props = getProps({ theme: mockTheme.emotion })
-
-    const spec = JSON.parse(props.element.spec)
-    spec.config = { background: "purple", axis: { labelColor: "blue" } }
-
-    props.element = {
-      ...props.element,
-      spec: JSON.stringify(spec),
-    }
-
-    const wrapper = mount(<ArrowVegaLiteChart {...props} />)
-    // @ts-expect-error
-    const generatedSpec = wrapper.instance().generateSpec()
-
-    expect(generatedSpec.config.background).toBe("purple")
-    expect(generatedSpec.config.axis.labelColor).toBe("blue")
-    // Verify that things not overwritten by the user still fall back to the
-    // theme default.
-    expect(generatedSpec.config.axis.titleColor).toBe(
-      mockTheme.emotion.colors.bodyText
-    )
-  })
-
-  describe("Types of dataframe indexes as x axis", () => {
-    describe("Supported", () => {
-      test("datetime", () => {
-        const mockElement = { data: DATETIME }
-        const q = new Quiver(mockElement)
-
-        expect(getDataArray(q)).toEqual([
-          {
-            "(index)": 978220800000,
-            "2000-12-31 00:00:00": new Date("2020-01-02T00:00:00.000Z"),
-            "2001-12-31 00:00:00": new Date("2020-10-20T00:00:00.000Z"),
-          },
-          {
-            "(index)": 1009756800000,
-            "2000-12-31 00:00:00": new Date("2020-01-02T00:00:00.000Z"),
-            "2001-12-31 00:00:00": new Date("2020-10-20T00:00:00.000Z"),
-          },
-        ])
-      })
-
-      test("float64", () => {
-        const mockElement = { data: FLOAT64 }
-        const q = new Quiver(mockElement)
-
-        expect(getDataArray(q)).toEqual([
-          { "(index)": 1.24, "1.24": 1.2, "2.35": 1.3 },
-          { "(index)": 2.35, "1.24": 1.4, "2.35": 1.5 },
-        ])
-      })
-
-      test("int64", () => {
-        const mockElement = { data: INT64 }
-        const q = new Quiver(mockElement)
-        expect(getDataArray(q)).toEqual([
-          {
-            "(index)": 1,
-            "1": 0,
-            "2": 1,
-          },
-          {
-            "(index)": 2,
-            "1": 2,
-            "2": 3,
-          },
-        ])
-      })
-
-      test("range", () => {
-        const mockElement = { data: RANGE }
-        const q = new Quiver(mockElement)
-
-        expect(getDataArray(q)).toEqual([
-          { "(index)": 0, "0": "foo", "1": "1" },
-          { "(index)": 1, "0": "bar", "1": "2" },
-        ])
-      })
-
-      test("uint64", () => {
-        const mockElement = { data: UINT64 }
-        const q = new Quiver(mockElement)
-        expect(getDataArray(q)).toEqual([
-          {
-            "(index)": 1,
-            "1": 1,
-            "2": 2,
-          },
-          {
-            "(index)": 2,
-            "1": 3,
-            "2": 4,
-          },
-        ])
-      })
-    })
-
-    describe("Unsupported", () => {
-      test("categorical", () => {
-        const mockElement = { data: CATEGORICAL }
-        const q = new Quiver(mockElement)
-        expect(getDataArray(q)).toEqual([
-          { c1: "foo", c2: 100 },
-          { c1: "bar", c2: 200 },
-        ])
-      })
-
-      test("unicode", () => {
-        const mockElement = { data: UNICODE }
-        const q = new Quiver(mockElement)
-
-        expect(getDataArray(q)).toEqual([
-          { c1: "foo", c2: "1" },
-          { c1: "bar", c2: "2" },
-        ])
-      })
-    })
+    render(<ArrowVegaLiteChart {...getProps()} />)
+    const vegaLiteChart = screen.getByTestId("stVegaLiteChart")
+    expect(vegaLiteChart).toBeInTheDocument()
+    expect(vegaLiteChart).toHaveClass("stVegaLiteChart")
   })
 })

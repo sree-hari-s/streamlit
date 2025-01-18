@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,18 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import urllib.parse
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import tornado.testing
 import tornado.web
 import tornado.websocket
-from tornado.websocket import WebSocketClientConnection
 
 from streamlit.proto.ForwardMsg_pb2 import ForwardMsg
 from streamlit.runtime import Runtime
 from streamlit.runtime.app_session import AppSession
 from streamlit.web.server import Server
+
+if TYPE_CHECKING:
+    from tornado.websocket import WebSocketClientConnection
 
 
 class ServerTestCase(tornado.testing.AsyncHTTPTestCase):
@@ -49,7 +54,7 @@ class ServerTestCase(tornado.testing.AsyncHTTPTestCase):
     def get_app(self) -> tornado.web.Application:
         self.server = Server(
             "/not/a/script.py",
-            "test command line",
+            is_hello=False,
         )
         app = self.server._create_app()
         return app
@@ -74,9 +79,9 @@ class ServerTestCase(tornado.testing.AsyncHTTPTestCase):
         # See the comment in WebsocketConnection.tsx about how we repurpose the
         # Sec-WebSocket-Protocol header for more information on how this works.
         if existing_session_id is None:
-            subprotocols = ["streamlit"]
+            subprotocols = ["streamlit", "PLACEHOLDER_AUTH_TOKEN"]
         else:
-            subprotocols = ["streamlit", existing_session_id]
+            subprotocols = ["streamlit", "PLACEHOLDER_AUTH_TOKEN", existing_session_id]
 
         return await tornado.websocket.websocket_connect(
             self.get_ws_url("/_stcore/stream"),
@@ -101,7 +106,7 @@ class ServerTestCase(tornado.testing.AsyncHTTPTestCase):
         )
         ServerTestCase._next_session_id += 1
 
-        mock_session = mock.MagicMock(AppSession, autospec=True, *args, **kwargs)
+        mock_session = mock.MagicMock(AppSession, autospec=True, *args, **kwargs)  # noqa: B026
         type(mock_session).id = mock_id
         return mock_session
 

@@ -1,5 +1,5 @@
 /**!
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,25 @@
 
 syntax = "proto3";
 
+option java_package = "com.snowflake.apps.streamlit";
+option java_outer_classname = "ForwardMsgProto";
+
+import "streamlit/proto/AutoRerun.proto";
 import "streamlit/proto/Common.proto";
 import "streamlit/proto/Delta.proto";
 import "streamlit/proto/GitInfo.proto";
+import "streamlit/proto/Logo.proto";
+import "streamlit/proto/Navigation.proto";
 import "streamlit/proto/NewSession.proto";
 import "streamlit/proto/PageConfig.proto";
 import "streamlit/proto/PageInfo.proto";
 import "streamlit/proto/PageProfile.proto";
 import "streamlit/proto/PageNotFound.proto";
 import "streamlit/proto/PagesChanged.proto";
+import "streamlit/proto/ParentMessage.proto";
 import "streamlit/proto/SessionEvent.proto";
 import "streamlit/proto/SessionStatus.proto";
+import "streamlit/proto/AuthRedirect.proto";
 
 // A message sent from Proxy to the browser
 message ForwardMsg {
@@ -47,6 +55,9 @@ message ForwardMsg {
 
     // Script was interrupted by rerun
     FINISHED_EARLY_FOR_RERUN = 2;
+
+    // A fragment of the script ran successfully.
+    FINISHED_FRAGMENT_RUN_SUCCESSFULLY = 3;
   }
 
   oneof type {
@@ -64,9 +75,20 @@ message ForwardMsg {
     SessionEvent session_event = 10;
 
     // Other messages.
+    Navigation navigation = 23;
     PageNotFound page_not_found = 15;
     PagesChanged pages_changed = 16;
     FileURLsResponse file_urls_response = 19;
+    AutoRerun auto_rerun = 21;
+
+    // App logo message
+    Logo logo = 22;
+
+    // Auth redirect message
+    AuthRedirect auth_redirect = 24;
+
+    // Platform - message to host
+    ParentMessage parent_message = 20;
 
     // A reference to a ForwardMsg that has already been delivered.
     // The client should substitute the message with the given hash
@@ -81,7 +103,7 @@ message ForwardMsg {
   string debug_last_backmsg_id = 17;
 
   reserved 7, 8;
-  // Next: 20
+  // Next: 25
 }
 
 // ForwardMsgMetadata contains all data that does _not_ get hashed (or cached)
@@ -98,14 +120,30 @@ message ForwardMsgMetadata {
   // Only set for Delta messages.
   repeated uint32 delta_path = 2;
 
+  // DEPRECATED: This is not used anymore.
   ElementDimensionSpec element_dimension_spec = 3;
+
+  // active_script_hash the forward message is associated from.
+  // For multipage apps v1, this will always be the page file running
+  // For multipage apps v2, this can be the main script or the page script
+  string active_script_hash = 4;
 }
 
+// DEPRECATED: This is not used anymore.
 // Specifies the dimensions for the element
 message ElementDimensionSpec {
-  // width in CSS points
+  // width in pixels
   uint32 width = 1;
 
-  // height in CSS points
+  // height in pixels
   uint32 height = 2;
+}
+
+// This is a list of ForwardMessages used to have a single protobuf message
+// that encapsulates multiple ForwardMessages. This is used in static streamlit app
+// generation in replaying all of the protobuf messages of a streamlit app. The
+// ForwardMsgList allows us to leverage the built-ins of protobuf in delimiting the ForwardMsgs
+// instead of needing to do that ourselves.
+message ForwardMsgList {
+  repeated ForwardMsg messages = 1;
 }

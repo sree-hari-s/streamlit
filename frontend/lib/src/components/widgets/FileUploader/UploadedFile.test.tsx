@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,43 +14,31 @@
  * limitations under the License.
  */
 
-import { CancelTokenSource } from "axios"
 import React from "react"
-import { mount, shallow } from "@streamlit/lib/src/test_util"
 
-import { Small } from "@streamlit/lib/src/components/shared/TextElements"
-import ProgressBar from "@streamlit/lib/src/components/shared/ProgressBar"
+import { CancelTokenSource } from "axios"
+import { screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
+import { render } from "@streamlit/lib/src/test_util"
 
 import UploadedFile, { Props, UploadedFileStatus } from "./UploadedFile"
 import { FileStatus, UploadFileInfo } from "./UploadFileInfo"
 
 const getProps = (fileStatus: FileStatus): Props => ({
   fileInfo: new UploadFileInfo("filename.txt", 15, 1, fileStatus),
-  onDelete: jest.fn(),
+  onDelete: vi.fn(),
 })
 
 describe("FileStatus widget", () => {
-  it("renders without crashing", () => {
-    const props = getProps({
-      type: "uploaded",
-      fileId: "fileId",
-      fileUrls: {},
-    })
-    const wrapper = shallow(<UploadedFileStatus {...props} />)
-
-    expect(wrapper).toBeDefined()
-  })
-
   it("shows progress bar when uploading", () => {
     const props = getProps({
       type: "uploading",
       cancelToken: null as unknown as CancelTokenSource,
       progress: 40,
     })
-    const wrapper = shallow(<UploadedFileStatus {...props} />)
-    const progressBarWrapper = wrapper.find(ProgressBar)
-
-    expect(progressBarWrapper.length).toBe(1)
+    render(<UploadedFileStatus {...props} />)
+    expect(screen.getByRole("progressbar")).toBeInTheDocument()
   })
 
   it("shows error status", () => {
@@ -58,9 +46,9 @@ describe("FileStatus widget", () => {
       type: "error",
       errorMessage: "Everything is terrible",
     })
-    const wrapper = shallow(<UploadedFileStatus {...props} />)
-    const errorMessageWrapper = wrapper.find("StyledErrorMessage")
-    expect(errorMessageWrapper.text()).toBe("Everything is terrible")
+    render(<UploadedFileStatus {...props} />)
+    const errorMessage = screen.getByTestId("stFileUploaderFileErrorMessage")
+    expect(errorMessage).toHaveTextContent("Everything is terrible")
   })
 
   it("show file size when uploaded", () => {
@@ -69,23 +57,23 @@ describe("FileStatus widget", () => {
       fileId: "fileId",
       fileUrls: {},
     })
-
-    const wrapper = shallow(<UploadedFileStatus {...props} />)
-    const statusWrapper = wrapper.find(Small)
-    expect(statusWrapper.text()).toBe("15.0B")
+    render(<UploadedFileStatus {...props} />)
+    expect(screen.getByText("15.0B")).toBeInTheDocument()
   })
 })
 
 describe("UploadedFile widget", () => {
-  it("renders without crashing", () => {
+  it("renders without crashing", async () => {
+    const user = userEvent.setup()
     const props = getProps({
       type: "uploaded",
       fileId: "fileId",
       fileUrls: {},
     })
-    const wrapper = mount(<UploadedFile {...props} />)
-    const deleteBtn = wrapper.find("button")
-    deleteBtn.simulate("click")
-    expect(props.onDelete).toHaveBeenCalled()
+    render(<UploadedFile {...props} />)
+    expect(screen.getByTestId("stFileUploaderFile")).toBeInTheDocument()
+    const deleteBtn = screen.getByRole("button")
+    await user.click(deleteBtn)
+    expect(props.onDelete).toHaveBeenCalledWith(1)
   })
 })

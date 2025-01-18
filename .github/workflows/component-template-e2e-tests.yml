@@ -1,4 +1,4 @@
-name: Component-template repository
+name: Component-template Repo E2E Tests
 
 on:
   push:
@@ -8,18 +8,23 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  e2e-tests:
-    runs-on: ubuntu-latest
+  component-template-e2e-tests:
+    runs-on: ubuntu-latest-8-cores
     steps:
       - name: Checkout Streamlit code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
           submodules: "recursive"
           fetch-depth: 2
 
+      - name: Enable and Prepare Latest Yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@4.5.3 --activate
+
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "19.x"
           cache: "yarn"
@@ -29,7 +34,7 @@ jobs:
         uses: ./.github/actions/build_info
 
       - name: Set up Python ${{ env.PYTHON_MAX_VERSION }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "${{ env.PYTHON_MAX_VERSION }}"
 
@@ -41,7 +46,7 @@ jobs:
 
       - name: Build Package
         timeout-minutes: 120
-        run: BUILD_AS_FAST_AS_POSSIBLE=1 make package
+        run: make package
 
       - name: Return path to Streamlit wheel
         id: streamlit_wheel
@@ -71,7 +76,7 @@ jobs:
           echo "output_file=${component_lib_tar_gz}" >> $GITHUB_OUTPUT
 
       - name: Checkout streamlit/component-template
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
           repository: streamlit/component-template

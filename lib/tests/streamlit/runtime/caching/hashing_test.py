@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,9 @@
 # limitations under the License.
 
 """st.memo/singleton hashing tests."""
+
+from __future__ import annotations
+
 import datetime
 import functools
 import hashlib
@@ -28,12 +31,8 @@ from enum import Enum, auto
 from io import BytesIO, StringIO
 from unittest.mock import MagicMock, Mock
 
-import cffi
-import dateutil.tz
 import numpy as np
-import pandas
 import pandas as pd
-import tzlocal
 from parameterized import parameterized
 from PIL import Image
 
@@ -49,12 +48,13 @@ from streamlit.runtime.caching.hashing import (
 )
 from streamlit.runtime.uploaded_file_manager import UploadedFile, UploadedFileRec
 from streamlit.type_util import is_type
+from streamlit.util import HASHLIB_KWARGS
 
 get_main_script_director = MagicMock(return_value=os.getcwd())
 
 
 def get_hash(value, hash_funcs=None, cache_type=None):
-    hasher = hashlib.new("md5")
+    hasher = hashlib.new("md5", **HASHLIB_KWARGS)
     update_hash(
         value, hasher, cache_type=cache_type or MagicMock(), hash_funcs=hash_funcs
     )
@@ -102,16 +102,8 @@ class HashTest(unittest.TestCase):
         self.assertNotEqual(id(naive_datetime1), id(naive_datetime1_copy))
         self.assertNotEqual(get_hash(naive_datetime1), get_hash(naive_datetime3))
 
-    @parameterized.expand(
-        [
-            datetime.timezone.utc,
-            tzlocal.get_localzone(),
-            dateutil.tz.gettz("America/Los_Angeles"),
-            dateutil.tz.gettz("Europe/Berlin"),
-            dateutil.tz.UTC,
-        ]
-    )
-    def test_datetime_aware(self, tz_info):
+    def test_datetime_aware(self):
+        tz_info = datetime.timezone.utc
         aware_datetime1 = datetime.datetime(2007, 12, 23, 15, 45, 55, tzinfo=tz_info)
         aware_datetime1_copy = datetime.datetime(
             2007, 12, 23, 15, 45, 55, tzinfo=tz_info
@@ -137,9 +129,9 @@ class HashTest(unittest.TestCase):
         ]
     )
     def test_pandas_timestamp(self, tz_info):
-        timestamp1 = pandas.Timestamp("2017-01-01T12", tz=tz_info)
-        timestamp1_copy = pandas.Timestamp("2017-01-01T12", tz=tz_info)
-        timestamp2 = pandas.Timestamp("2019-01-01T12", tz=tz_info)
+        timestamp1 = pd.Timestamp("2017-01-01T12", tz=tz_info)
+        timestamp1_copy = pd.Timestamp("2017-01-01T12", tz=tz_info)
+        timestamp2 = pd.Timestamp("2019-01-01T12", tz=tz_info)
 
         self.assertEqual(get_hash(timestamp1), get_hash(timestamp1_copy))
         self.assertNotEqual(id(timestamp1), id(timestamp1_copy))
@@ -265,18 +257,90 @@ class HashTest(unittest.TestCase):
         self.assertEqual(get_hash(p1), get_hash(p2))
         self.assertNotEqual(get_hash(p1), get_hash(p3))
 
-    def test_pandas_dataframe(self):
-        df1 = pd.DataFrame({"foo": [12]})
-        df2 = pd.DataFrame({"foo": [42]})
-        df3 = pd.DataFrame({"foo": [12]})
+    def test_pandas_large_dataframe(self):
+        df1 = pd.DataFrame(np.zeros((_PANDAS_ROWS_LARGE, 4)), columns=list("ABCD"))
+        df2 = pd.DataFrame(np.ones((_PANDAS_ROWS_LARGE, 4)), columns=list("ABCD"))
+        df3 = pd.DataFrame(np.zeros((_PANDAS_ROWS_LARGE, 4)), columns=list("ABCD"))
 
         self.assertEqual(get_hash(df1), get_hash(df3))
         self.assertNotEqual(get_hash(df1), get_hash(df2))
 
-        df4 = pd.DataFrame(np.zeros((_PANDAS_ROWS_LARGE, 4)), columns=list("ABCD"))
-        df5 = pd.DataFrame(np.zeros((_PANDAS_ROWS_LARGE, 4)), columns=list("ABCD"))
-
-        self.assertEqual(get_hash(df4), get_hash(df5))
+    @parameterized.expand(
+        [
+            (pd.DataFrame({"foo": [12]}), pd.DataFrame({"foo": [12]}), True),
+            (pd.DataFrame({"foo": [12]}), pd.DataFrame({"foo": [42]}), False),
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                True,
+            ),
+            # Extra column
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4], "C": [1, 2, 3]}),
+                False,
+            ),
+            # Different values
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 5]}),
+                False,
+            ),
+            # Different order
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                pd.DataFrame(data={"B": [1, 2, 3], "A": [2, 3, 4]}),
+                False,
+            ),
+            # Different index
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}, index=[1, 2, 3]),
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}, index=[1, 2, 4]),
+                False,
+            ),
+            # Missing column
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                pd.DataFrame(data={"A": [1, 2, 3]}),
+                False,
+            ),
+            # Different sort
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}).sort_values(
+                    by=["A"]
+                ),
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}).sort_values(
+                    by=["B"], ascending=False
+                ),
+                False,
+            ),
+            # Different headers
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "C": [2, 3, 4]}),
+                pd.DataFrame(data={"A": [1, 2, 3], "B": [2, 3, 4]}),
+                False,
+            ),
+            # Reordered columns
+            (
+                pd.DataFrame(data={"A": [1, 2, 3], "C": [2, 3, 4]}),
+                pd.DataFrame(data={"C": [2, 3, 4], "A": [1, 2, 3]}),
+                False,
+            ),
+            # Slightly different dtypes
+            (
+                pd.DataFrame(
+                    data={"A": [1, 2, 3], "C": pd.array([1, 2, 3], dtype="UInt64")}
+                ),
+                pd.DataFrame(
+                    data={"A": [1, 2, 3], "C": pd.array([1, 2, 3], dtype="Int64")}
+                ),
+                False,
+            ),
+        ]
+    )
+    def test_pandas_dataframe(self, df1, df2, expected):
+        result = get_hash(df1) == get_hash(df2)
+        self.assertEqual(result, expected)
 
     def test_pandas_series(self):
         series1 = pd.Series([1, 2])
@@ -291,6 +355,12 @@ class HashTest(unittest.TestCase):
 
         self.assertEqual(get_hash(series4), get_hash(series5))
 
+    def test_pandas_series_similar_dtypes(self):
+        series1 = pd.Series([1, 2], dtype="UInt64")
+        series2 = pd.Series([1, 2], dtype="Int64")
+
+        self.assertNotEqual(get_hash(series1), get_hash(series2))
+
     def test_numpy(self):
         np1 = np.zeros(10)
         np2 = np.zeros(11)
@@ -303,6 +373,16 @@ class HashTest(unittest.TestCase):
         np5 = np.zeros(_NP_SIZE_LARGE)
 
         self.assertEqual(get_hash(np4), get_hash(np5))
+
+    def test_numpy_similar_dtypes(self):
+        np1 = np.ones(10, dtype="u8")
+        np2 = np.ones(10, dtype="i8")
+
+        np3 = np.ones(10, dtype=[("a", "u8"), ("b", "i8")])
+        np4 = np.ones(10, dtype=[("a", "i8"), ("b", "u8")])
+
+        self.assertNotEqual(get_hash(np1), get_hash(np2))
+        self.assertNotEqual(get_hash(np3), get_hash(np4))
 
     def test_PIL_image(self):
         im1 = Image.new("RGB", (50, 50), (220, 20, 60))
@@ -378,8 +458,8 @@ class HashTest(unittest.TestCase):
         temp1 = tempfile.NamedTemporaryFile()
         temp2 = tempfile.NamedTemporaryFile()
 
-        with open(__file__, "r") as f:
-            with open(__file__, "r") as g:
+        with open(__file__) as f:
+            with open(__file__) as g:
                 self.assertEqual(get_hash(f), get_hash(g))
 
             self.assertNotEqual(get_hash(f), get_hash(temp1))
@@ -388,7 +468,7 @@ class HashTest(unittest.TestCase):
         self.assertNotEqual(get_hash(temp1), get_hash(temp2))
 
     def test_file_position(self):
-        with open(__file__, "r") as f:
+        with open(__file__) as f:
             h1 = get_hash(f)
             self.assertEqual(h1, get_hash(f))
             f.readline()
@@ -442,33 +522,7 @@ class HashTest(unittest.TestCase):
 
 
 class NotHashableTest(unittest.TestCase):
-    """Tests for various unhashable types. Many of these types *are*
-    hashable by @st.cache's hasher, and we're explicitly removing support for
-    them.
-    """
-
-    def _build_cffi(self, name):
-        ffibuilder = cffi.FFI()
-        ffibuilder.set_source(
-            "cffi_bin._%s" % name,
-            r"""
-                static int %s(int x)
-                {
-                    return x + "A";
-                }
-            """
-            % name,
-        )
-
-        ffibuilder.cdef("int %s(int);" % name)
-        ffibuilder.compile(verbose=True)
-
-    def test_compiled_ffi_not_hashable(self):
-        self._build_cffi("foo")
-        from cffi_bin._foo import ffi as foo
-
-        with self.assertRaises(UnhashableTypeError):
-            get_hash(foo)
+    """Tests for various unhashable types."""
 
     def test_lambdas_not_hashable(self):
         with self.assertRaises(UnhashableTypeError):
@@ -476,7 +530,7 @@ class NotHashableTest(unittest.TestCase):
 
     def test_generator_not_hashable(self):
         with self.assertRaises(UnhashableTypeError):
-            get_hash((x for x in range(1)))
+            get_hash(x for x in range(1))
 
     def test_hash_funcs_acceptable_keys(self):
         """Test that hashes are equivalent when hash_func key is supplied both as a

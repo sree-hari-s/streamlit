@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,31 +15,39 @@
  */
 
 import React, { PureComponent, ReactElement, ReactNode } from "react"
-import { ChevronRight, Close } from "@emotion-icons/material-outlined"
+
+import { ChevronLeft, ChevronRight } from "@emotion-icons/material-outlined"
 import { withTheme } from "@emotion/react"
 import { Resizable } from "re-resizable"
 
 import {
-  Icon,
   BaseButton,
   BaseButtonKind,
   EmotionTheme,
-  localStorageAvailable,
-  StreamlitEndpoints,
-  IsSidebarContext,
-  isEmbed,
-  isColoredLineDisplayed,
   IAppPage,
+  Icon,
+  isColoredLineDisplayed,
+  isEmbed,
+  IsSidebarContext,
+  localStorageAvailable,
+  Logo,
   PageConfig,
+  StreamlitEndpoints,
 } from "@streamlit/lib"
 
 import {
-  StyledSidebar,
-  StyledSidebarCloseButton,
-  StyledSidebarContent,
-  StyledSidebarCollapsedControl,
-  StyledSidebarUserContent,
+  RESIZE_HANDLE_WIDTH,
+  StyledCollapseSidebarButton,
+  StyledLogo,
+  StyledLogoLink,
+  StyledNoLogoSpacer,
+  StyledOpenSidebarButton,
   StyledResizeHandle,
+  StyledSidebar,
+  StyledSidebarContent,
+  StyledSidebarHeaderContainer,
+  StyledSidebarOpenContainer,
+  StyledSidebarUserContent,
 } from "./styled-components"
 import SidebarNav from "./SidebarNav"
 
@@ -50,10 +58,13 @@ export interface SidebarProps {
   initialSidebarState?: PageConfig.SidebarState
   theme: EmotionTheme
   hasElements: boolean
+  appLogo: Logo | null
   appPages: IAppPage[]
+  navSections: string[]
   onPageChange: (pageName: string) => void
   currentPageScriptHash: string
   hideSidebarNav: boolean
+  expandSidebarNav: boolean
 }
 
 interface State {
@@ -61,8 +72,8 @@ interface State {
   sidebarWidth: string
   lastInnerWidth: number
 
-  // When hovering the nav
-  hideScrollbar: boolean
+  // When hovering sidebar header
+  showSidebarCollapse: boolean
 }
 
 class Sidebar extends PureComponent<SidebarProps, State> {
@@ -84,14 +95,14 @@ class Sidebar extends PureComponent<SidebarProps, State> {
     )
 
     const cachedSidebarWidth = localStorageAvailable()
-      ? localStorage.getItem("sidebarWidth")
+      ? window.localStorage.getItem("sidebarWidth")
       : undefined
 
     this.state = {
       collapsedSidebar: Sidebar.shouldCollapse(props, this.mediumBreakpointPx),
       sidebarWidth: cachedSidebarWidth || Sidebar.minWidth,
       lastInnerWidth: window ? window.innerWidth : Infinity,
-      hideScrollbar: false,
+      showSidebarCollapse: false,
     }
   }
 
@@ -99,8 +110,11 @@ class Sidebar extends PureComponent<SidebarProps, State> {
     this.mediumBreakpointPx = Sidebar.calculateMaxBreakpoint(
       this.props.theme.breakpoints.md
     )
-    // Immediately expand/collapse sidebar when initialSidebarState changes.
-    if (this.props.initialSidebarState !== prevProps.initialSidebarState) {
+    // Immediately expand/collapse sidebar when initialSidebarState or hasElements changes
+    if (
+      this.props.initialSidebarState !== prevProps.initialSidebarState ||
+      this.props.hasElements !== prevProps.hasElements
+    ) {
       this.setState({
         collapsedSidebar: Sidebar.shouldCollapse(
           this.props,
@@ -196,12 +210,68 @@ class Sidebar extends PureComponent<SidebarProps, State> {
     this.setState({ collapsedSidebar: !collapsedSidebar })
   }
 
-  hideScrollbar = (newValue: boolean): void => {
-    this.setState({ hideScrollbar: newValue })
+  onMouseOver = (): void => {
+    this.setState({ showSidebarCollapse: true })
+  }
+
+  onMouseOut = (): void => {
+    this.setState({ showSidebarCollapse: false })
+  }
+
+  // Additional safeguard for sidebar height sizing
+  headerDecorationVisible(): boolean {
+    let coloredLineExists = false
+    const headerDecoration = document.getElementById("stDecoration")
+    if (headerDecoration) {
+      const decorationStyles = window.getComputedStyle(headerDecoration)
+      coloredLineExists =
+        decorationStyles.visibility !== "hidden" &&
+        decorationStyles.visibility !== "collapse" &&
+        decorationStyles.display !== "none"
+    }
+    return coloredLineExists
+  }
+
+  renderLogo(collapsed: boolean): ReactElement {
+    const { appLogo, endpoints } = this.props
+    const { sidebarWidth } = this.state
+
+    if (!appLogo) {
+      return <StyledNoLogoSpacer data-testid="stLogoSpacer" />
+    }
+
+    const displayImage =
+      collapsed && appLogo.iconImage ? appLogo.iconImage : appLogo.image
+    const source = endpoints.buildMediaURL(displayImage)
+
+    const logo = (
+      <StyledLogo
+        src={source}
+        size={appLogo.size}
+        sidebarWidth={sidebarWidth}
+        alt="Logo"
+        className="stLogo"
+        data-testid="stLogo"
+      />
+    )
+
+    if (appLogo.link) {
+      return (
+        <StyledLogoLink
+          href={appLogo.link}
+          target="_blank"
+          rel="noreferrer"
+          data-testid="stLogoLink"
+        >
+          {logo}
+        </StyledLogoLink>
+      )
+    }
+    return logo
   }
 
   public render(): ReactNode {
-    const { collapsedSidebar, sidebarWidth, hideScrollbar } = this.state
+    const { collapsedSidebar, sidebarWidth, showSidebarCollapse } = this.state
     const {
       appPages,
       chevronDownshift,
@@ -210,28 +280,36 @@ class Sidebar extends PureComponent<SidebarProps, State> {
       onPageChange,
       currentPageScriptHash,
       hideSidebarNav,
+      expandSidebarNav,
+      navSections,
     } = this.props
 
     const hasPageNavAbove = appPages.length > 1 && !hideSidebarNav
 
+    // Handles checking the URL params
+    const isEmbedded = isEmbed() && !isColoredLineDisplayed()
+    // If header decoration visible, move sidebar down so decoration doesn't go below it
+    const sidebarAdjust = !isEmbedded && this.headerDecorationVisible()
+
     // The tabindex is required to support scrolling by arrow keys.
     return (
       <>
-        {collapsedSidebar && (
-          <StyledSidebarCollapsedControl
-            chevronDownshift={chevronDownshift}
-            isCollapsed={collapsedSidebar}
-            data-testid="collapsedControl"
-          >
+        <StyledSidebarOpenContainer
+          chevronDownshift={chevronDownshift}
+          data-testid="stSidebarCollapsedControl"
+        >
+          {this.renderLogo(true)}
+          <StyledOpenSidebarButton>
             <BaseButton
               kind={BaseButtonKind.HEADER_NO_PADDING}
               onClick={this.toggleCollapse}
             >
-              <Icon content={ChevronRight} size="lg" />
+              <Icon content={ChevronRight} size="xl" />
             </BaseButton>
-          </StyledSidebarCollapsedControl>
-        )}
+          </StyledOpenSidebarButton>
+        </StyledSidebarOpenContainer>
         <Resizable
+          className="stSidebar"
           data-testid="stSidebar"
           aria-expanded={!collapsedSidebar}
           enable={{
@@ -240,11 +318,19 @@ class Sidebar extends PureComponent<SidebarProps, State> {
             bottom: false,
             left: false,
           }}
-          handleStyles={{ right: { width: "8px", right: "-6px" } }}
+          handleStyles={{
+            right: {
+              width: RESIZE_HANDLE_WIDTH,
+              right: "-6px",
+            },
+          }}
           handleComponent={{
             right: <StyledResizeHandle onClick={this.resetSidebarWidth} />,
           }}
-          size={{ width: sidebarWidth, height: "100%" }}
+          size={{
+            width: sidebarWidth,
+            height: "auto",
+          }}
           as={StyledSidebar}
           onResizeStop={(e, direction, ref, d) => {
             const newWidth = parseInt(sidebarWidth, 10) + d.width
@@ -253,33 +339,45 @@ class Sidebar extends PureComponent<SidebarProps, State> {
           // Props part of StyledSidebar, but not Resizable component
           // @ts-expect-error
           isCollapsed={collapsedSidebar}
-          isEmbed={isEmbed() && !isColoredLineDisplayed()}
+          adjustTop={sidebarAdjust}
           sidebarWidth={sidebarWidth}
         >
           <StyledSidebarContent
-            hideScrollbar={hideScrollbar}
+            data-testid="stSidebarContent"
             ref={this.sidebarRef}
+            onMouseOver={this.onMouseOver}
+            onMouseOut={this.onMouseOut}
           >
-            <StyledSidebarCloseButton>
-              <BaseButton
-                kind={BaseButtonKind.HEADER_BUTTON}
-                onClick={this.toggleCollapse}
+            <StyledSidebarHeaderContainer data-testid="stSidebarHeader">
+              {this.renderLogo(false)}
+              <StyledCollapseSidebarButton
+                showSidebarCollapse={showSidebarCollapse}
+                data-testid="stSidebarCollapseButton"
               >
-                <Icon content={Close} size="lg" />
-              </BaseButton>
-            </StyledSidebarCloseButton>
-            {!hideSidebarNav && (
+                <BaseButton
+                  kind={BaseButtonKind.HEADER_NO_PADDING}
+                  onClick={this.toggleCollapse}
+                >
+                  <Icon content={ChevronLeft} size="xl" />
+                </BaseButton>
+              </StyledCollapseSidebarButton>
+            </StyledSidebarHeaderContainer>
+            {hasPageNavAbove && (
               <SidebarNav
                 endpoints={this.props.endpoints}
                 appPages={appPages}
                 collapseSidebar={this.toggleCollapse}
                 currentPageScriptHash={currentPageScriptHash}
+                navSections={navSections}
                 hasSidebarElements={hasElements}
-                hideParentScrollbar={this.hideScrollbar}
+                expandSidebarNav={expandSidebarNav}
                 onPageChange={onPageChange}
               />
             )}
-            <StyledSidebarUserContent hasPageNavAbove={hasPageNavAbove}>
+            <StyledSidebarUserContent
+              hasPageNavAbove={hasPageNavAbove}
+              data-testid="stSidebarUserContent"
+            >
               {children}
             </StyledSidebarUserContent>
           </StyledSidebarContent>

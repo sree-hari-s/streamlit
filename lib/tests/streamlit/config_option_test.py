@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 import pytest
 from parameterized import parameterized
 
-from streamlit.config_option import ConfigOption, DeprecationError
+from streamlit.config_option import ConfigOption
 
 
 class ConfigOptionTest(unittest.TestCase):
@@ -120,8 +122,9 @@ class ConfigOptionTest(unittest.TestCase):
             expiration_date="2000-01-01",
         )
 
-        with self.assertRaises(DeprecationError):
-            c.set_value(my_value, where_defined)
+        # Expired options behave like deprecated options
+        # just a slightly different text.
+        c.set_value(my_value, where_defined)
 
         self.assertTrue(c.is_expired())
 

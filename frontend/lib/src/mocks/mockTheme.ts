@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,23 +18,23 @@
 
 import { lightThemePrimitives } from "baseui"
 import { transparentize } from "color2k"
+
 import { ThemeConfig } from "@streamlit/lib/src/theme"
-import { createEmotionColors } from "@streamlit/lib/src/theme/getColors"
 import { createBaseUiTheme } from "@streamlit/lib/src/theme/createThemeUtil"
+import { createEmotionColors } from "@streamlit/lib/src/theme/getColors"
 import {
   breakpoints,
+  colors,
   fonts,
   fontSizes,
   fontWeights,
   genericFonts,
   iconSizes,
   lineHeights,
-  letterSpacings,
   radii,
   sizes,
   spacing,
   zIndices,
-  colors,
 } from "@streamlit/lib/src/theme/primitives"
 
 const requiredThemeColors = {
@@ -63,6 +63,7 @@ const requiredThemeColors = {
 }
 
 interface OptionalThemeColors {
+  skeletonBackgroundColor?: string
   widgetBackgroundColor?: string
   widgetBorderColor?: string
 }
@@ -79,14 +80,12 @@ const emotionMockTheme = {
   inSidebar: false,
   breakpoints,
   colors: createEmotionColors(genericColors),
-  genericColors,
   fonts,
   fontSizes,
   fontWeights,
   genericFonts,
   iconSizes,
   lineHeights,
-  letterSpacings,
   radii,
   sizes,
   spacing,

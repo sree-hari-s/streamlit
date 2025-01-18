@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,46 +14,39 @@
 
 """Tests that are common to both st.cache_data and st.cache_resource"""
 
+from __future__ import annotations
+
 import threading
 import time
 import unittest
 from datetime import timedelta
-from typing import Any, List
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 from parameterized import parameterized
 
 import streamlit as st
 from streamlit.runtime import Runtime
-from streamlit.runtime.caching import (
-    CACHE_DATA_MESSAGE_REPLAY_CTX,
-    CACHE_RESOURCE_MESSAGE_REPLAY_CTX,
-    cache_data,
-    cache_resource,
-)
+from streamlit.runtime.caching import cache_data, cache_resource
 from streamlit.runtime.caching.cache_errors import CacheReplayClosureError
-from streamlit.runtime.caching.cache_type import CacheType
 from streamlit.runtime.caching.cache_utils import CachedResult
-from streamlit.runtime.caching.cached_message_replay import (
-    MultiCacheResults,
-    _make_widget_key,
-)
 from streamlit.runtime.caching.storage.dummy_cache_storage import (
     MemoryCacheStorageManager,
 )
 from streamlit.runtime.forward_msg_queue import ForwardMsgQueue
+from streamlit.runtime.fragment import MemoryFragmentStorage
 from streamlit.runtime.memory_uploaded_file_manager import MemoryUploadedFileManager
+from streamlit.runtime.pages_manager import PagesManager
 from streamlit.runtime.scriptrunner import (
     ScriptRunContext,
     add_script_run_ctx,
     get_script_run_ctx,
-    script_run_context,
 )
+from streamlit.runtime.scriptrunner_utils import script_run_context
 from streamlit.runtime.state import SafeSessionState, SessionState
-from streamlit.runtime.uploaded_file_manager import UploadedFileManager
-from streamlit.testing.script_interactions import InteractiveScriptTests
+from streamlit.testing.v1.app_test import AppTest
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
-from tests.exception_capturing_thread import ExceptionCapturingThread, call_on_threads
+from tests.exception_capturing_thread import call_on_threads
 from tests.streamlit.elements.image_test import create_image
 from tests.testutil import create_mock_script_run_ctx
 
@@ -67,15 +60,11 @@ def get_text_or_block(delta):
         return "new_block"
 
 
-def as_cached_result(value: Any, cache_type: CacheType) -> MultiCacheResults:
+def as_cached_result(value: Any) -> CachedResult:
     """Creates cached results for a function that returned `value`
     and did not execute any elements.
     """
-    result = CachedResult(value, [], st._main.id, st.sidebar.id)
-    widget_key = _make_widget_key([], cache_type)
-    d = {widget_key: result}
-    initial = MultiCacheResults(set(), d)
-    return initial
+    return CachedResult(value, [], st._main.id, st.sidebar.id)
 
 
 class CommonCacheTest(DeltaGeneratorTestCase):
@@ -93,7 +82,7 @@ class CommonCacheTest(DeltaGeneratorTestCase):
 
         super().tearDown()
 
-    def get_text_delta_contents(self) -> List[str]:
+    def get_text_delta_contents(self) -> list[str]:
         deltas = self.get_all_deltas_from_queue()
         text = [
             element.text.body
@@ -240,11 +229,11 @@ class CommonCacheTest(DeltaGeneratorTestCase):
 
     @parameterized.expand(
         [
-            ("cache_data", cache_data, CACHE_DATA_MESSAGE_REPLAY_CTX),
-            ("cache_resource", cache_resource, CACHE_RESOURCE_MESSAGE_REPLAY_CTX),
+            ("cache_data", cache_data),
+            ("cache_resource", cache_resource),
         ]
     )
-    def test_cached_st_function_warning(self, _, cache_decorator, call_stack):
+    def test_cached_st_function_warning(self, _, cache_decorator):
         """Ensure we properly warn when interactive st.foo functions are called
         inside a cached function.
         """
@@ -256,13 +245,16 @@ class CommonCacheTest(DeltaGeneratorTestCase):
                 session_id="test session id",
                 _enqueue=forward_msg_queue.enqueue,
                 query_string="",
-                session_state=SafeSessionState(SessionState()),
+                session_state=SafeSessionState(SessionState(), lambda: None),
                 uploaded_file_mgr=MemoryUploadedFileManager("/mock/upload"),
-                page_script_hash="",
-                user_info={"email": "test@test.com"},
+                main_script_path="",
+                user_info={"email": "test@example.com"},
+                fragment_storage=MemoryFragmentStorage(),
+                pages_manager=PagesManager(""),
             ),
         )
-        with patch.object(call_stack, "_show_cached_st_function_warning") as warning:
+
+        with patch.object(st, "exception") as warning:
             st.text("foo")
             warning.assert_not_called()
 
@@ -318,20 +310,6 @@ class CommonCacheTest(DeltaGeneratorTestCase):
             cached_widget()
 
             warning.assert_called()
-            warning.reset_mock()
-
-            # Make sure everything got reset properly
-            st.text("foo")
-            warning.assert_not_called()
-
-            # Test st.cache functions with widgets enabled
-            @cache_decorator(experimental_allow_widgets=True)
-            def cached_widget_enabled():
-                st.button("Press me too!")
-
-            cached_widget_enabled()
-
-            warning.assert_not_called()
             warning.reset_mock()
 
             # Make sure everything got reset properly
@@ -541,23 +519,6 @@ class CommonCacheTest(DeltaGeneratorTestCase):
         img_fn_multi()
 
     @parameterized.expand(
-        [("cache_data", cache_data), ("cache_resource", cache_resource)]
-    )
-    def test_nested_widget_replay(self, _, cache_decorator):
-        """Regression test for GH#5677"""
-
-        @cache_decorator(experimental_allow_widgets=True)
-        def foo():
-            x = st.number_input("AAAA", 1, 100, 12)
-            return x**2
-
-        @cache_decorator(experimental_allow_widgets=True)
-        def baz(y):
-            return foo() + y
-
-        st.write(baz(10))
-
-    @parameterized.expand(
         [
             ("cache_data", cache_data, cache_data.clear),
             ("cache_resource", cache_resource, cache_resource.clear),
@@ -686,6 +647,41 @@ class CommonCacheTest(DeltaGeneratorTestCase):
 
         function_with_spinner_empty_text(3)
         self.assertFalse(self.forward_msg_queue.is_empty())
+
+    @parameterized.expand(
+        [("cache_data", cache_data), ("cache_resource", cache_resource)]
+    )
+    def test_spinner_with_nested_cached_functions(self, _, cache_decorator):
+        """If a cached function calls another cached function, only one spinner
+        should be created.
+        """
+
+        @cache_decorator(show_spinner="")
+        def inner(x: int) -> int:
+            return x
+
+        @cache_decorator(show_spinner="")
+        def outer(x: int) -> int:
+            return inner(x)
+
+        outer(3)
+        self.assertFalse(self.forward_msg_queue.is_empty())
+
+        # The spinner uses an empty element and shows the spinner only
+        # after a timeout. Instead of mocking the time and waiting for the
+        # timeout, we check for the empty element in the queue as the spinner's
+        # surrogate.
+        empty_elements_count = 0
+        for msg in self.forward_msg_queue._queue:
+            if (
+                msg.HasField("delta")
+                and msg.delta.HasField("new_element")
+                and msg.delta.new_element.HasField("empty")
+            ):
+                empty_elements_count += 1
+        # Since we automatically prevent spinners for nested cached functions,
+        # there should only be a single empty element.
+        self.assertEqual(empty_elements_count, 1)
 
 
 class CommonCacheTTLTest(unittest.TestCase):
@@ -835,10 +831,6 @@ class CommonCacheThreadingTest(unittest.TestCase):
     def tearDown(self):
         # Some of these tests reach directly into CALL_STACK data and twiddle it.
         # Reset default values on teardown.
-        CACHE_DATA_MESSAGE_REPLAY_CTX._cached_func_stack = []
-        CACHE_DATA_MESSAGE_REPLAY_CTX._suppress_st_function_warning = 0
-        CACHE_RESOURCE_MESSAGE_REPLAY_CTX._cached_func_stack = []
-        CACHE_RESOURCE_MESSAGE_REPLAY_CTX._suppress_st_function_warning = 0
 
         # Clear caches
         st.cache_data.clear()
@@ -952,67 +944,9 @@ class CommonCacheThreadingTest(unittest.TestCase):
         # Sanity check: ensure we can still call our cached function.
         self.assertEqual(42, foo())
 
-    @parameterized.expand(
-        [
-            ("cache_data", CACHE_DATA_MESSAGE_REPLAY_CTX),
-            ("cache_resource", CACHE_RESOURCE_MESSAGE_REPLAY_CTX),
-        ]
-    )
-    def test_multithreaded_call_stack(self, _, call_stack):
-        """CachedFunctionCallStack works across multiple threads."""
 
-        def get_counter():
-            return len(call_stack._cached_func_stack)
+def test_arrow_replay():
+    """Regression test for https://github.com/streamlit/streamlit/issues/6103"""
+    at = AppTest.from_file("test_data/arrow_replay.py").run()
 
-        def set_counter(val):
-            call_stack._cached_func_stack = ["foo"] * val
-
-        self.assertEqual(0, get_counter())
-        set_counter(1)
-        self.assertEqual(1, get_counter())
-
-        values_in_thread = []
-
-        def thread_test():
-            values_in_thread.append(get_counter())
-            set_counter(55)
-            values_in_thread.append(get_counter())
-
-        thread = ExceptionCapturingThread(target=thread_test)
-        thread.start()
-        thread.join()
-        thread.assert_no_unhandled_exception()
-
-        self.assertEqual([0, 55], values_in_thread)
-
-        # The other thread should not have modified the main thread
-        self.assertEqual(1, get_counter())
-
-
-class WidgetReplayInteractionTest(InteractiveScriptTests):
-    def test_dynamic_widget_replay(self):
-        script = self.script_from_filename("test_data/cached_widget_replay_dynamic.py")
-
-        sr = script.run()
-        assert len(sr.checkbox) == 1
-        assert sr.text[0].value == "['foo']"
-
-        sr2 = sr.checkbox[0].check().run()
-        assert len(sr2.multiselect) == 1
-        assert sr2.text[0].value == "[]"
-
-        sr3 = sr2.multiselect[0].select("baz").run()
-        assert sr3.text[0].value == "['baz']"
-
-        sr4 = sr3.checkbox[0].uncheck().run()
-        sr5 = sr4.button[0].click().run()
-        assert sr5.text[0].value == "['foo']"
-
-
-class WidgetReplayTest(InteractiveScriptTests):
-    def test_arrow_replay(self):
-        """Regression test for https://github.com/streamlit/streamlit/issues/6103"""
-        script = self.script_from_filename("test_data/arrow_replay.py")
-
-        sr = script.run()
-        assert len(sr.exception) == 0
+    assert not at.exception

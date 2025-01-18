@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,49 +14,57 @@
  * limitations under the License.
  */
 
+import React, { useEffect, useRef } from "react"
+
 import Clipboard from "clipboard"
-import React, { PureComponent, ReactNode, createRef } from "react"
 import { Copy as CopyIcon } from "react-feather"
+import { useTheme } from "@emotion/react"
+
+import { EmotionTheme } from "@streamlit/lib/src/theme"
+
 import { StyledCopyButton } from "./styled-components"
 
 interface Props {
   text: string
 }
 
-class CopyButton extends PureComponent<Props> {
-  private button = createRef<HTMLButtonElement>()
+const CopyButton: React.FC<Props> = ({ text }) => {
+  const theme: EmotionTheme = useTheme()
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const clipboardRef = useRef<Clipboard | null>(null)
 
-  private clipboard: ClipboardJS | null = null
-
-  public componentDidMount = (): void => {
-    const node = this.button.current
+  useEffect(() => {
+    const node = buttonRef.current
 
     if (node !== null) {
-      this.clipboard = new Clipboard(node)
+      clipboardRef.current = new Clipboard(node, {
+        // Set the container so that copying also works in dialogs.
+        // Otherwise, the copy event is swallowed somehow.
+        container: node.parentElement ?? undefined,
+      })
     }
-  }
 
-  public componentWillUnmount = (): void => {
-    if (this.clipboard !== null) {
-      this.clipboard.destroy()
+    return () => {
+      if (clipboardRef.current !== null) {
+        clipboardRef.current.destroy()
+      }
     }
-  }
+  }, [])
 
-  public render(): ReactNode {
-    return (
-      <StyledCopyButton
-        title="Copy to clipboard"
-        ref={this.button}
-        data-clipboard-text={this.props.text}
-        style={{
-          top: 0,
-          right: 0,
-        }}
-      >
-        <CopyIcon size="16" />
-      </StyledCopyButton>
-    )
-  }
+  return (
+    <StyledCopyButton
+      data-testid="stCodeCopyButton"
+      title="Copy to clipboard"
+      ref={buttonRef}
+      data-clipboard-text={text}
+      style={{
+        top: 0,
+        right: 0,
+      }}
+    >
+      <CopyIcon size={theme.iconSizes.base} />
+    </StyledCopyButton>
+  )
 }
 
 export default CopyButton

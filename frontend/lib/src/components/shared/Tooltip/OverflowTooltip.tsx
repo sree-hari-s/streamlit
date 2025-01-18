@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import React, { ReactNode, ReactElement, useState } from "react"
+import React, { ReactElement, ReactNode, useState } from "react"
 
 import Tooltip, { Placement } from "./Tooltip"
-import { StyledWrapper, StyledEllipsizedDiv } from "./styled-components"
+import { StyledEllipsizedDiv, StyledWrapper } from "./styled-components"
 
 export interface OverflowTooltipProps {
   content: ReactNode

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
  */
 
 import styled from "@emotion/styled"
-import { transparentize } from "color2k"
 
 export const StyledWrapper = styled.div({
   display: "table",
@@ -33,19 +32,16 @@ export const StyledEllipsizedDiv = styled.div({
 export const StyledTooltipContentWrapper = styled.div(({ theme }) => ({
   boxSizing: "border-box",
   fontSize: `${theme.fontSizes.sm}`,
-  maxWidth: `calc(${theme.sizes.contentMaxWidth} - 4rem)`,
-  maxHeight: "300px",
+  maxWidth: `calc(${theme.sizes.contentMaxWidth} - 2 * ${theme.spacing.threeXL})`,
+  maxHeight: theme.sizes.maxTooltipHeight,
   overflow: ["auto", "overlay"],
   padding: `${theme.spacing.xs} ${theme.spacing.md}`,
 
   [`@media (max-width: ${theme.breakpoints.sm})`]: {
-    maxWidth: `calc(100% - 2rem)`,
+    maxWidth: `calc(100% - ${theme.spacing.threeXL})`,
   },
   img: {
     maxWidth: "100%",
-  },
-  code: {
-    background: transparentize(theme.colors.darkenedBgMix100, 0.8),
   },
   "*": {
     fontSize: `${theme.fontSizes.sm} !important`,

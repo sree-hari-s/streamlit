@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
 # limitations under the License.
 
 """button unit test."""
+
+from parameterized import parameterized
 
 import streamlit as st
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
@@ -33,12 +35,27 @@ class ButtonTest(DeltaGeneratorTestCase):
         self.assertEqual(c.is_form_submitter, False)
         self.assertEqual(c.disabled, False)
 
-    def test_type(self):
+    @parameterized.expand(["primary", "secondary", "tertiary"])
+    def test_type(self, type):
         """Test that it can be called with type param."""
-        st.button("the label", type="primary")
+        st.button("the label", type=type)
 
         c = self.get_delta_from_queue().new_element.button
-        self.assertEqual(c.type, "primary")
+        self.assertEqual(c.type, type)
+
+    def test_emoji_icon(self):
+        """Test that it can be called with emoji icon."""
+        st.button("the label", icon="⚡")
+
+        c = self.get_delta_from_queue().new_element.button
+        self.assertEqual(c.icon, "⚡")
+
+    def test_material_icon(self):
+        """Test that it can be called with material icon."""
+        st.button("the label", icon=":material/thumb_up:")
+
+        c = self.get_delta_from_queue().new_element.button
+        self.assertEqual(c.icon, ":material/thumb_up:")
 
     def test_just_disabled(self):
         """Test that it can be called with disabled param."""
@@ -60,3 +77,12 @@ class ButtonTest(DeltaGeneratorTestCase):
 
         c = self.get_delta_from_queue().new_element.button
         self.assertEqual(c.use_container_width, False)
+
+    def test_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.button("the label"))()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)

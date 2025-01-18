@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,118 +15,143 @@
  */
 
 // These imports are each exported specifically in order to minimize public apis.
-export {
-  IS_DEV_ENV,
-  RERUN_PROMPT_MODAL_DIALOG,
-  WEBSOCKET_PORT_DEV,
-} from "./baseconsts"
+export { AppRoot, BlockNode, ElementNode } from "./AppNode"
+export { IS_DEV_ENV, WEBSOCKET_PORT_DEV } from "./baseconsts"
 export { default as VerticalBlock } from "./components/core/Block"
+export type { BlockPropsWithoutWidth } from "./components/core/Block"
 export { default as ElementNodeRenderer } from "./components/core/Block/ElementNodeRenderer"
 export type { ElementNodeRendererProps } from "./components/core/Block/ElementNodeRenderer"
-export type { BlockPropsWithoutWidth } from "./components/core/Block"
-export type { StreamlitEndpoints } from "./StreamlitEndpoints"
-export { SessionInfo } from "./SessionInfo"
-export { ScriptRunState } from "./ScriptRunState"
-export { WidgetStateManager, createFormsData } from "./WidgetStateManager"
-export type { FormsData } from "./WidgetStateManager"
-export { FileUploadClient } from "./FileUploadClient"
-export { ComponentRegistry } from "./components/widgets/CustomComponent"
-export { BlockNode, AppRoot, ElementNode } from "./AppNode"
-export { Quiver } from "./dataframes/Quiver"
-export { default as VegaLiteChartElement } from "./components/elements/VegaLiteChart"
-export type {
-  DeployedAppMetadata,
-  IGuestToHostMessage,
-  IMenuItem,
-  IAllowedMessageOriginsResponse,
-  IToolbarItem,
-} from "./hostComm/types"
-export {
-  default as Modal,
-  ModalHeader,
-  ModalBody,
-  ModalFooter,
-  ModalButton,
-} from "./components/shared/Modal"
+export { default as IsDialogContext } from "./components/core/IsDialogContext"
+export { default as IsSidebarContext } from "./components/core/IsSidebarContext"
+export { LibContext } from "./components/core/LibContext"
+export type { LibConfig, LibContextProps } from "./components/core/LibContext"
+export { PortalProvider } from "./components/core/Portal/PortalProvider"
 export { default as ThemeProvider } from "./components/core/ThemeProvider"
-export { LocalStore, localStorageAvailable } from "./util/storageUtils"
-export {
-  createAutoTheme,
-  createPresetThemes,
-  CUSTOM_THEME_NAME,
-  getCachedTheme,
-  toExportedTheme,
-  AUTO_THEME_NAME,
-  getDefaultTheme,
-  globalStyles,
-  isPresetTheme,
-  removeCachedTheme,
-  setCachedTheme,
-  createTheme,
-  lightTheme,
-  darkTheme,
-  toThemeInput,
-  baseTheme,
-  hasLightBackgroundColor,
-} from "./theme"
-export { default as emotionLightTheme } from "./theme/emotionLightTheme"
-export type { ThemeConfig, EmotionTheme } from "./theme"
-export { mount, shallow, mockWindowLocation, render } from "./test_util"
-export { logError, logMessage, logWarning, logAlways } from "./util/log"
-export { getPossibleBaseUris, buildHttpUri, buildWsUri } from "./util/UriUtil"
-export type { BaseUriParts } from "./util/UriUtil"
-export { ensureError } from "./util/ErrorHandling"
+export { default as AlertElement } from "./components/elements/AlertElement"
+export { default as StreamlitSyntaxHighlighter } from "./components/elements/CodeBlock/StreamlitSyntaxHighlighter"
+export { handleFavicon } from "./components/elements/Favicon"
+export { default as TextElement } from "./components/elements/TextElement"
 export {
   default as BaseButton,
   BaseButtonKind,
 } from "./components/shared/BaseButton"
-export { PerformanceEvents } from "./profiler/PerformanceEvents"
-export { ForwardMsgCache } from "./ForwardMessageCache"
-export { default as Resolver } from "./util/Resolver"
+export { default as BaseColorPicker } from "./components/shared/BaseColorPicker"
+export { default as UISelectbox } from "./components/shared/Dropdown/Selectbox"
 export {
+  DynamicIcon,
+  EmojiIcon,
+  default as Icon,
+} from "./components/shared/Icon"
+export {
+  default as Modal,
+  ModalBody,
+  ModalButton,
+  ModalFooter,
+  ModalHeader,
+} from "./components/shared/Modal"
+export { CircularBuffer, Profiler } from "./components/shared/Profiler"
+export { default as StreamlitMarkdown } from "./components/shared/StreamlitMarkdown"
+export { Placement, default as Tooltip } from "./components/shared/Tooltip"
+export { WindowDimensionsProvider } from "./components/shared/WindowDimensions/Provider"
+export { ComponentRegistry } from "./components/widgets/CustomComponent"
+export { Quiver } from "./dataframes/Quiver"
+export { FileUploadClient } from "./FileUploadClient"
+export { ForwardMsgCache } from "./ForwardMessageCache"
+export { default as useScrollToBottom } from "./hooks/useScrollToBottom"
+export { default as HostCommunicationManager } from "./hostComm"
+export { HOST_COMM_VERSION } from "./hostComm/HostCommunicationManager"
+export type {
+  AppConfig,
+  DeployedAppMetadata,
+  IGuestToHostMessage,
+  IHostConfigResponse,
+  IMenuItem,
+  IToolbarItem,
+} from "./hostComm/types"
+export {
+  mockEndpoints,
   mockSessionInfo,
   mockSessionInfoProps,
-  mockEndpoints,
 } from "./mocks/mocks"
-export { default as UISelectbox } from "./components/shared/Dropdown/Selectbox"
-export { default as Icon, EmojiIcon } from "./components/shared/Icon"
-export { default as StreamlitMarkdown } from "./components/shared/StreamlitMarkdown"
+export { mockTheme } from "./mocks/mockTheme"
+export { PerformanceEvents } from "./profiler/PerformanceEvents"
+export * from "./proto"
+export { RootStyleProvider } from "./RootStyleProvider"
+export { ScriptRunState } from "./ScriptRunState"
+export { SessionInfo } from "./SessionInfo"
+export type {
+  FileUploadClientConfig,
+  StreamlitEndpoints,
+} from "./StreamlitEndpoints"
 export {
-  hashString,
+  customRenderLibContext,
+  mockWindowLocation,
+  render,
+} from "./test_util"
+export {
+  AUTO_THEME_NAME,
+  CUSTOM_THEME_NAME,
+  baseTheme,
+  createAutoTheme,
+  createPresetThemes,
+  createTheme,
+  darkTheme,
+  getCachedTheme,
+  getDefaultTheme,
+  getHostSpecifiedTheme,
+  globalStyles,
+  hasLightBackgroundColor,
+  isPresetTheme,
+  lightTheme,
+  removeCachedTheme,
+  setCachedTheme,
+  toExportedTheme,
+  toThemeInput,
+} from "./theme"
+export type { EmotionTheme, PresetThemeName, ThemeConfig } from "./theme"
+export { default as emotionLightTheme } from "./theme/emotionLightTheme"
+export { fonts, spacing } from "./theme/primitives"
+export { ensureError } from "./util/ErrorHandling"
+export { useIsOverflowing } from "./util/Hooks"
+export { logAlways, logError, logMessage, logWarning } from "./util/log"
+export { default as Resolver } from "./util/Resolver"
+export { LocalStore, localStorageAvailable } from "./util/storageUtils"
+export { Timer } from "./util/Timer"
+export {
+  buildHttpUri,
+  buildWsUri,
+  getPossibleBaseUris,
+  makePath,
+} from "./util/UriUtil"
+export type { BaseUriParts } from "./util/UriUtil"
+export {
+  extractPageNameFromPathName,
   generateUID,
-  getElementWidgetID,
+  getCookie,
+  getElementId,
   getEmbeddingIdClassName,
   getIFrameEnclosingApp,
+  hashString,
   isColoredLineDisplayed,
-  isDarkTheme,
+  isDarkThemeInQueryParams,
   isEmbed,
-  isFooterDisplayed,
   isInChildFrame,
-  isLightTheme,
+  isLightThemeInQueryParams,
+  isNullOrUndefined,
   isPaddingDisplayed,
   isScrollingHidden,
   isToolbarDisplayed,
-  notUndefined,
-  setCookie,
-  extractPageNameFromPathName,
   makeElementWithInfoText,
-  getCookie,
+  notNullOrUndefined,
+  notUndefined,
+  preserveEmbedQueryParams,
+  setCookie,
 } from "./util/utils"
-export { useIsOverflowing } from "./util/Hooks"
-export { LibContext } from "./components/core/LibContext"
-export type { LibContextProps } from "./components/core/LibContext"
-export { handleFavicon } from "./components/elements/Favicon"
-export { default as HostCommunicationManager } from "./hostComm"
-export { HOST_COMM_VERSION } from "./hostComm/HostCommunicationManager"
-export { default as IsSidebarContext } from "./components/core/IsSidebarContext"
-export { default as Tooltip, Placement } from "./components/shared/Tooltip"
-export { default as BaseColorPicker } from "./components/shared/BaseColorPicker"
-export { Timer } from "./util/Timer"
-export { Small } from "./components/shared/TextElements"
-export { spacing, fonts } from "./theme/primitives"
-export { mockTheme } from "./mocks/mockTheme"
-export { default as AlertElement } from "./components/elements/AlertElement"
-export { default as TextElement } from "./components/elements/TextElement"
-export { default as useScrollToBottom } from "./hooks/useScrollToBottom"
-export { RootStyleProvider } from "./RootStyleProvider"
-export * from "./proto"
+export { WidgetStateManager, createFormsData } from "./WidgetStateManager"
+export type { FormsData } from "./WidgetStateManager"
+export {
+  mark,
+  measure,
+  type StPerformanceMetric,
+  type StPerformanceMark,
+} from "./util/performance"

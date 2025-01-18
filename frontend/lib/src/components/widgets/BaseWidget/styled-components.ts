@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,12 +40,12 @@ export const StyledWidgetLabel = styled.label<StyledWidgetProps>(
   })
 )
 
-export const StyledWidgetLabelHelp = styled.div(() => ({
+export const StyledWidgetLabelHelp = styled.div({
   display: "flex",
   flexDirection: "row",
   justifyContent: "flex-end",
   flex: 1,
-}))
+})
 
 export const StyledWidgetInstructions = styled.div(({ theme }) => ({
   fontSize: theme.fontSizes.twoSm,
@@ -54,7 +54,7 @@ export const StyledWidgetInstructions = styled.div(({ theme }) => ({
   textAlign: "right",
   position: "absolute",
   bottom: 0,
-  right: theme.spacing.halfSmFont,
+  right: `calc(${theme.fontSizes.sm} * 0.5)`,
 }))
 
 export const StyledWidgetLabelHelpInline = styled.label(({ theme }) => ({

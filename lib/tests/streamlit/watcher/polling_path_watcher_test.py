@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 from unittest import mock
 
@@ -22,7 +24,7 @@ class PollingPathWatcherTest(unittest.TestCase):
     """Test PollingPathWatcher."""
 
     def setUp(self):
-        super(PollingPathWatcherTest, self).setUp()
+        super().setUp()
         self.util_patch = mock.patch("streamlit.watcher.polling_path_watcher.util")
         self.util_mock = self.util_patch.start()
 
@@ -44,7 +46,7 @@ class PollingPathWatcherTest(unittest.TestCase):
         self.sleep_patch.start()
 
     def tearDown(self):
-        super(PollingPathWatcherTest, self).tearDown()
+        super().tearDown()
         self.util_patch.stop()
         self.executor_patch.stop()
         self.sleep_patch.stop()
@@ -102,6 +104,29 @@ class PollingPathWatcherTest(unittest.TestCase):
         # This is the test:
         self._run_executor_tasks()
         callback.assert_not_called()
+
+        watcher.close()
+
+    def test_callback_called_if_modification_time_0(self):
+        """Test that callback are executed anyway even if modification time is 0.0"""
+        callback = mock.Mock()
+
+        self.util_mock.path_modification_time = lambda *args: 0.0
+        self.util_mock.calc_md5_with_blocking_retries = lambda _, **kwargs: "11"
+
+        watcher = polling_path_watcher.PollingPathWatcher(
+            "/this/is/my/folder/", callback
+        )
+
+        self._run_executor_tasks()
+        callback.assert_not_called()
+
+        # Same mtime!
+        self.util_mock.calc_md5_with_blocking_retries = lambda _, **kwargs: "22"
+
+        # This is the test:
+        self._run_executor_tasks()
+        callback.assert_called()
 
         watcher.close()
 

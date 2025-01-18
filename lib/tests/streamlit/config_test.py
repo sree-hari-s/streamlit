@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,12 @@
 # limitations under the License.
 
 """Config System Unittest."""
+
+from __future__ import annotations
+
 import copy
 import os
+import sys
 import textwrap
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
@@ -23,6 +27,7 @@ import pytest
 from parameterized import parameterized
 
 from streamlit import config, env_util
+from streamlit.config import ShowErrorDetailsConfigOptions
 from streamlit.config_option import ConfigOption
 from streamlit.errors import StreamlitAPIException
 
@@ -54,15 +59,25 @@ class ConfigTest(unittest.TestCase):
     def test_set_user_option_scriptable(self):
         """Test that scriptable options can be set from API."""
         # This is set in lib/tests/conftest.py to off
-        self.assertEqual(True, config.get_option("client.displayEnabled"))
+        self.assertEqual(
+            ShowErrorDetailsConfigOptions.FULL,
+            config.get_option("client.showErrorDetails"),
+        )
 
         try:
-            # client.displayEnabled and client.caching can be set after run starts.
-            config.set_user_option("client.displayEnabled", False)
-            self.assertEqual(False, config.get_option("client.displayEnabled"))
+            # client.showErrorDetails can be set after run starts.
+            config.set_user_option(
+                "client.showErrorDetails", ShowErrorDetailsConfigOptions.STACKTRACE
+            )
+            self.assertEqual(
+                ShowErrorDetailsConfigOptions.STACKTRACE,
+                config.get_option("client.showErrorDetails"),
+            )
         finally:
             # Restore original value
-            config.set_user_option("client.displayEnabled", True)
+            config.set_user_option(
+                "client.showErrorDetails", ShowErrorDetailsConfigOptions.FULL
+            )
 
     def test_set_user_option_unscriptable(self):
         """Test that unscriptable options cannot be set with st.set_option."""
@@ -80,13 +95,31 @@ class ConfigTest(unittest.TestCase):
         )
 
         # Test that it works.
-        self.assertEqual(config_option.key, "_test.simpleParam")
-        self.assertEqual(config_option.section, "_test")
-        self.assertEqual(config_option.name, "simpleParam")
-        self.assertEqual(config_option.description, "Simple config option.")
-        self.assertEqual(config_option.where_defined, ConfigOption.DEFAULT_DEFINITION)
-        self.assertEqual(config_option.value, 12345)
-        self.assertEqual(config_option.env_var, "STREAMLIT__TEST_SIMPLE_PARAM")
+        assert config_option.key == "_test.simpleParam"
+        assert config_option.section == "_test"
+        assert config_option.name == "simpleParam"
+        assert config_option.description == "Simple config option."
+        assert config_option.where_defined == ConfigOption.DEFAULT_DEFINITION
+        assert config_option.value == 12345
+        assert config_option.env_var == "STREAMLIT__TEST_SIMPLE_PARAM"
+        assert not config_option.multiple
+
+    def test_multiple_config_option(self):
+        """Test creating a multiple value config option."""
+        config_option = ConfigOption(
+            "_test.simpleParam",
+            description="Simple config option.",
+            default_val=[12345],
+        )
+
+        assert config_option.key == "_test.simpleParam"
+        assert config_option.section == "_test"
+        assert config_option.name == "simpleParam"
+        assert config_option.description == "Simple config option."
+        assert config_option.where_defined == ConfigOption.DEFAULT_DEFINITION
+        assert config_option.value == [12345]
+        assert config_option.env_var == "STREAMLIT__TEST_SIMPLE_PARAM"
+        assert config_option.multiple
 
     def test_complex_config_option(self):
         """Test setting a complex (functional) config option."""
@@ -311,6 +344,20 @@ class ConfigTest(unittest.TestCase):
 
         config._delete_option("_test.testDeleteOption")
 
+    def test_multiple_value_option(self):
+        option = config._create_option(
+            "_test.testMultipleValueOption",
+            description="This option tests multiple values for an option",
+            default_val=["Option 1", "Option 2"],
+        )
+
+        assert option.multiple
+        config.get_config_options(force_reparse=True)
+        assert config.get_option("_test.testMultipleValueOption") == [
+            "Option 1",
+            "Option 2",
+        ]
+
     def test_sections_order(self):
         sections = sorted(
             [
@@ -318,17 +365,17 @@ class ConfigTest(unittest.TestCase):
                 "browser",
                 "client",
                 "theme",
-                "deprecation",
                 "global",
                 "logger",
                 "magic",
                 "mapbox",
                 "runner",
+                "secrets",
                 "server",
                 "ui",
             ]
         )
-        keys = sorted(list(config._section_descriptions.keys()))
+        keys = sorted(config._section_descriptions.keys())
         self.assertEqual(sections, keys)
 
     def test_config_option_keys(self):
@@ -337,9 +384,8 @@ class ConfigTest(unittest.TestCase):
                 "browser.gatherUsageStats",
                 "browser.serverAddress",
                 "browser.serverPort",
-                "client.caching",
-                "client.displayEnabled",
                 "client.showErrorDetails",
+                "client.showSidebarNavigation",
                 "client.toolbarMode",
                 "theme.base",
                 "theme.primaryColor",
@@ -347,31 +393,28 @@ class ConfigTest(unittest.TestCase):
                 "theme.secondaryBackgroundColor",
                 "theme.textColor",
                 "theme.font",
-                "deprecation.showfileUploaderEncoding",
-                "deprecation.showImageFormat",
-                "deprecation.showPyplotGlobalUse",
+                "global.appTest",
                 "global.developmentMode",
-                "global.disableWatchdogWarning",
                 "global.disableWidgetStateDuplicationWarning",
-                "global.logLevel",
+                "global.e2eTest",
                 "global.maxCachedMessageAge",
                 "global.minCachedMessageSize",
                 "global.showWarningOnDirectExecution",
+                "global.storeCachedForwardMessagesInMemory",
                 "global.suppressDeprecationWarnings",
                 "global.unitTest",
-                "global.dataFrameSerialization",
                 "logger.enableRich",
                 "logger.level",
                 "logger.messageFormat",
                 "runner.enforceSerializableSessionState",
                 "runner.magicEnabled",
-                "runner.installTracer",
-                "runner.fixMatplotlib",
                 "runner.postScriptGC",
                 "runner.fastReruns",
+                "runner.enumCoercion",
                 "magic.displayRootDocString",
                 "magic.displayLastExprIfNoSemicolon",
                 "mapbox.token",
+                "secrets.files",
                 "server.baseUrlPath",
                 "server.enableCORS",
                 "server.cookieSecret",
@@ -388,10 +431,11 @@ class ConfigTest(unittest.TestCase):
                 "server.maxUploadSize",
                 "server.maxMessageSize",
                 "server.enableStaticServing",
+                "server.enableArrowTruncation",
                 "server.sslCertFile",
                 "server.sslKeyFile",
+                "server.disconnectedSessionTTL",
                 "ui.hideTopBar",
-                "ui.hideSidebarNav",
             ]
         )
         keys = sorted(config._config_options.keys())
@@ -438,15 +482,21 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(1234, config._maybe_read_env_variable("env:RANDOM_TEST"))
 
     def test_update_config_with_toml(self):
-        self.assertEqual(True, config.get_option("client.caching"))
+        self.assertEqual(
+            ShowErrorDetailsConfigOptions.FULL,
+            config.get_option("client.showErrorDetails"),
+        )
         toml = textwrap.dedent(
             """
            [client]
-           caching = false
+           showErrorDetails = "type"
         """
         )
         config._update_config_with_toml(toml, "test")
-        self.assertEqual(False, config.get_option("client.caching"))
+        self.assertEqual(
+            ShowErrorDetailsConfigOptions.TYPE,
+            config.get_option("client.showErrorDetails"),
+        )
 
     def test_set_option(self):
         with self.assertLogs(logger="streamlit.config", level="WARNING") as cm:
@@ -457,8 +507,8 @@ class ConfigTest(unittest.TestCase):
             cm.output[0],
         )
 
-        config._set_option("client.caching", "test", "test")
-        self.assertEqual("test", config.get_option("client.caching"))
+        config._set_option("browser.gatherUsageStats", "test", "test")
+        self.assertEqual("test", config.get_option("browser.gatherUsageStats"))
 
     def test_is_manually_set(self):
         config._set_option("browser.serverAddress", "some.bucket", "test")
@@ -579,6 +629,24 @@ class ConfigTest(unittest.TestCase):
             disconnect_callback()
             patched_disconnect.assert_called_once()
 
+    def test_secret_files_default_values(self):
+        """Verify that we're looking for secrets.toml in the right place."""
+        if "win32" not in sys.platform:
+            # conftest.py sets the HOME envvar to "/mock/home/folder".
+            expected_global_path = "/mock/home/folder/.streamlit/secrets.toml"
+        else:
+            # On windows systems, HOME does not work so we look in the user's directory instead.
+            expected_global_path = os.path.join(
+                os.path.expanduser("~"), ".streamlit", "secrets.toml"
+            )
+        self.assertEqual(
+            [
+                expected_global_path,
+                os.path.abspath("./.streamlit/secrets.toml"),
+            ],
+            config.get_option("secrets.files"),
+        )
+
 
 class ConfigLoadingTest(unittest.TestCase):
     """Tests that involve loading the config.toml file."""
@@ -604,7 +672,7 @@ class ConfigLoadingTest(unittest.TestCase):
             path_exists.return_value = False
             config.get_config_options()
 
-            self.assertEqual(True, config.get_option("client.caching"))
+            self.assertEqual(True, config.get_option("browser.gatherUsageStats"))
             self.assertIsNone(config.get_option("theme.font"))
 
     def test_load_global_config(self):

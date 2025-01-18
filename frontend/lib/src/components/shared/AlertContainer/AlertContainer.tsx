@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,9 +16,12 @@
 
 import React, { ReactElement, ReactNode } from "react"
 
-import { Notification, KIND } from "baseui/notification"
+import { KIND, Notification } from "baseui/notification"
+import { useTheme } from "@emotion/react"
+
+import { EmotionTheme } from "@streamlit/lib/src/theme"
+
 import { StyledAlertContent } from "./styled-components"
-import { radii } from "@streamlit/lib/src/theme/primitives"
 
 export enum Kind {
   ERROR = "error",
@@ -69,33 +72,46 @@ export default function AlertContainer({
   width,
   children,
 }: AlertContainerProps): ReactElement {
+  const theme: EmotionTheme = useTheme()
+
+  const testid = kind.charAt(0).toUpperCase() + kind.slice(1)
   return (
     <Notification
       kind={getNotificationKind(kind)}
       overrides={{
         Body: {
           style: {
-            marginTop: 0,
-            marginBottom: 0,
-            marginLeft: 0,
-            marginRight: 0,
+            marginTop: theme.spacing.none,
+            marginBottom: theme.spacing.none,
+            marginLeft: theme.spacing.none,
+            marginRight: theme.spacing.none,
             width: width ? width.toString() : undefined,
             border: 0,
-            borderTopRightRadius: radii.lg,
-            borderBottomRightRadius: radii.lg,
-            borderTopLeftRadius: radii.lg,
-            borderBottomLeftRadius: radii.lg,
+            borderTopRightRadius: theme.radii.default,
+            borderBottomRightRadius: theme.radii.default,
+            borderTopLeftRadius: theme.radii.default,
+            borderBottomLeftRadius: theme.radii.default,
+            paddingTop: theme.spacing.lg,
+            paddingBottom: theme.spacing.lg,
+            paddingRight: theme.spacing.lg,
+            paddingLeft: theme.spacing.lg,
+          },
+          props: {
+            "data-testid": "stAlertContainer",
+            className: `stAlertContainer`,
           },
         },
         InnerContainer: {
           style: {
             width: "100%",
-            lineHeight: "1.5",
+            lineHeight: theme.lineHeights.small,
           },
         },
       }}
     >
-      <StyledAlertContent>{children}</StyledAlertContent>
+      <StyledAlertContent data-testid={`stAlertContent${testid}`}>
+        {children}
+      </StyledAlertContent>
     </Notification>
   )
 }

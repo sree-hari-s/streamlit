@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,55 +15,55 @@
  */
 
 import React from "react"
+
+import { screen } from "@testing-library/react"
 import Clipboard from "clipboard"
-import { shallow, mount } from "@streamlit/lib/src/test_util"
+
+import { render } from "@streamlit/lib/src/test_util"
 
 import CopyButton from "./CopyButton"
 
-jest.mock("clipboard")
+vi.mock("clipboard")
 
 describe("CopyButton Element", () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    vi.clearAllMocks()
   })
 
-  const wrapper = shallow(<CopyButton text="test" />)
-
   it("renders without crashing", () => {
-    expect(wrapper.find("StyledCopyButton").length).toBe(1)
+    render(<CopyButton text="test" />)
+    expect(screen.getByTestId("stCodeCopyButton")).toBeInTheDocument()
   })
 
   describe("attributes", () => {
     it("should have title", () => {
-      expect(wrapper.find("StyledCopyButton").prop("title")).toBe(
+      render(<CopyButton text="test" />)
+      expect(screen.getByTestId("stCodeCopyButton")).toHaveAttribute(
+        "title",
         "Copy to clipboard"
       )
     })
 
     it("should have clipboard text", () => {
-      expect(
-        wrapper.find("StyledCopyButton").prop("data-clipboard-text")
-      ).toBe("test")
+      render(<CopyButton text="test" />)
+      expect(screen.getByTestId("stCodeCopyButton")).toHaveAttribute(
+        "data-clipboard-text",
+        "test"
+      )
     })
-  })
-
-  it("should unmount", () => {
-    wrapper.unmount()
-
-    expect(wrapper.html()).toBeNull()
   })
 
   describe("calling clipboard", () => {
     it("should be called on did mount", () => {
-      mount(<CopyButton text="test" />)
+      render(<CopyButton text="test" />)
 
       expect(Clipboard).toHaveBeenCalled()
     })
 
     it("should be called on unmount", () => {
-      const wrapper = mount(<CopyButton text="test" />)
+      const { unmount } = render(<CopyButton text="test" />)
 
-      wrapper.unmount()
+      unmount()
 
       // @ts-expect-error
       const mockClipboard = Clipboard.mock.instances[0]

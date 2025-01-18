@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+import {
+  isNullOrUndefined,
+  notNullOrUndefined,
+} from "@streamlit/lib/src/util/utils"
 
 import { ForwardMsg } from "./proto"
 import { logMessage } from "./util/log"
@@ -97,7 +102,7 @@ export class ForwardMsgCache {
     }
 
     let newMsg = this.getCachedMessage(msg.refHash as string, true)
-    if (newMsg != null) {
+    if (notNullOrUndefined(newMsg)) {
       logMessage(`Cached ForwardMsg HIT [hash=${msg.refHash}]`)
     } else {
       // Cache miss: fetch from the server
@@ -170,7 +175,7 @@ export class ForwardMsgCache {
     updateScriptRunCount: boolean
   ): ForwardMsg | undefined {
     const cached = this.messages.get(hash)
-    if (cached == null) {
+    if (isNullOrUndefined(cached)) {
       return undefined
     }
 

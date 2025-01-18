@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ export const StyledDocName = styled.span(({ theme }) => ({
 }))
 
 export const StyledDocType = styled.span(({ theme }) => ({
-  color: theme.colors.green70,
+  color: theme.colors.docStringTypeText,
 }))
 
 export const StyledDocValue = styled.span()
@@ -40,8 +40,8 @@ export const StyledDocContainer = styled.span<StyledDocContainerProps>(
   ({ theme }) => ({
     display: "flex",
     flexDirection: "column",
-    borderRadius: theme.radii.lg,
-    border: `1px solid ${theme.colors.fadedText05}`,
+    borderRadius: theme.radii.default,
+    border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
     fontFamily: theme.genericFonts.codeFont,
     fontSize: theme.fontSizes.sm,
   })
@@ -50,7 +50,11 @@ export const StyledDocContainer = styled.span<StyledDocContainerProps>(
 export const StyledDocHeader = styled.div(({ theme }) => ({
   padding: `${theme.spacing.sm} ${theme.spacing.lg}`,
   backgroundColor: theme.colors.docStringContainerBackground,
-  borderBottom: `1px solid ${theme.colors.fadedText05}`,
+  borderBottom: `${theme.sizes.borderWidth} solid ${theme.colors.borderColorLight}`,
+  // Add rounded corners to the top of the container to prevent the background
+  // color from bleeding into the surrounding area.
+  borderTopLeftRadius: theme.radii.default,
+  borderTopRightRadius: theme.radii.default,
   fontSize: theme.fontSizes.sm,
   overflow: ["auto", "overlay"],
 }))
@@ -63,7 +67,7 @@ export const StyledDocString = styled.div(({ theme }) => ({
   fontSize: theme.fontSizes.sm,
 
   "&:not(:last-child)": {
-    borderBottom: `1px solid ${theme.colors.fadedText05}`,
+    borderBottom: `${theme.sizes.borderWidth} solid ${theme.colors.borderColorLight}`,
   },
 }))
 
@@ -77,7 +81,7 @@ export const StyledMembersTable = styled.table(({ theme }) => ({
 
 export const StyledMembersRow = styled.tr(({ theme }) => ({
   "&:not(:last-child)": {
-    borderBottom: `1px dotted ${theme.colors.fadedText05}`,
+    borderBottom: `${theme.sizes.borderWidth} dotted ${theme.colors.borderColorLight}`,
   },
 }))
 

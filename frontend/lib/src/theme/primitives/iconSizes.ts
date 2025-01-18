@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ export const iconSizes = {
   xs: "0.5rem",
   sm: "0.75rem",
   md: "0.9rem",
+  base: "1rem",
   lg: "1.25rem",
   xl: "1.5rem",
   twoXL: "1.8rem",

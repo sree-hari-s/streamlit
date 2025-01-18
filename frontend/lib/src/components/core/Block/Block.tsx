@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,49 @@
  * limitations under the License.
  */
 
-import React, { ReactElement } from "react"
-import { useTheme } from "@emotion/react"
-import { AutoSizer } from "react-virtualized"
+import React, {
+  ReactElement,
+  ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react"
 
+import classNames from "classnames"
+import { useTheme } from "@emotion/react"
+
+import { LibContext } from "@streamlit/lib/src/components/core/LibContext"
 import { Block as BlockProto } from "@streamlit/lib/src/proto"
-import { BlockNode, AppNode, ElementNode } from "@streamlit/lib/src/AppNode"
-import { getElementWidgetID } from "@streamlit/lib/src/util/utils"
+import { AppNode, BlockNode, ElementNode } from "@streamlit/lib/src/AppNode"
+import {
+  getElementId,
+  notNullOrUndefined,
+} from "@streamlit/lib/src/util/utils"
 import { Form } from "@streamlit/lib/src/components/widgets/Form"
 import Tabs, { TabProps } from "@streamlit/lib/src/components/elements/Tabs"
+import Popover from "@streamlit/lib/src/components/elements/Popover"
 import ChatMessage from "@streamlit/lib/src/components/elements/ChatMessage"
+import Dialog from "@streamlit/lib/src/components/elements/Dialog"
 import Expander from "@streamlit/lib/src/components/elements/Expander"
+import { useScrollToBottom } from "@streamlit/lib/src/hooks/useScrollToBottom"
 
 import {
+  assignDividerColor,
   BaseBlockProps,
+  convertKeyToClassName,
+  getKeyFromId,
   isComponentStale,
   shouldComponentBeEnabled,
-  assignDividerColor,
 } from "./utils"
 import ElementNodeRenderer from "./ElementNodeRenderer"
-
 import {
   StyledColumn,
   StyledHorizontalBlock,
   StyledVerticalBlock,
-  styledVerticalBlockWrapperStyles,
+  StyledVerticalBlockBorderWrapper,
+  StyledVerticalBlockBorderWrapperProps,
+  StyledVerticalBlockWrapper,
 } from "./styled-components"
 
 export interface BlockPropsWithoutWidth extends BaseBlockProps {
@@ -53,6 +71,7 @@ interface BlockPropsWithWidth extends BaseBlockProps {
 // Render BlockNodes (i.e. container nodes).
 const BlockNodeRenderer = (props: BlockPropsWithWidth): ReactElement => {
   const { node } = props
+  const { fragmentIdsThisRun } = useContext(LibContext)
 
   if (node.isEmpty && !node.deltaBlock.allowEmpty) {
     return <></>
@@ -63,18 +82,40 @@ const BlockNodeRenderer = (props: BlockPropsWithWidth): ReactElement => {
     enable,
     node,
     props.scriptRunState,
-    props.scriptRunId
+    props.scriptRunId,
+    fragmentIdsThisRun
   )
 
   const childProps = { ...props, ...{ node } }
-  const child: ReactElement = <LayoutBlock {...childProps} />
+
+  const disableFullscreenMode =
+    props.disableFullscreenMode ||
+    notNullOrUndefined(node.deltaBlock.dialog) ||
+    notNullOrUndefined(node.deltaBlock.popover)
+
+  const child: ReactElement = (
+    <LayoutBlock
+      {...childProps}
+      disableFullscreenMode={disableFullscreenMode}
+    />
+  )
+
+  if (node.deltaBlock.dialog) {
+    return (
+      <Dialog
+        element={node.deltaBlock.dialog as BlockProto.Dialog}
+        deltaMsgReceivedAt={node.deltaMsgReceivedAt}
+      >
+        {child}
+      </Dialog>
+    )
+  }
 
   if (node.deltaBlock.expandable) {
     return (
       <Expander
         empty={node.isEmpty}
         isStale={isStale}
-        widgetsDisabled={props.widgetsDisabled}
         element={node.deltaBlock.expandable as BlockProto.Expandable}
       >
         {child}
@@ -82,8 +123,21 @@ const BlockNodeRenderer = (props: BlockPropsWithWidth): ReactElement => {
     )
   }
 
+  if (node.deltaBlock.popover) {
+    return (
+      <Popover
+        empty={node.isEmpty}
+        element={node.deltaBlock.popover as BlockProto.Popover}
+        width={props.width}
+      >
+        {child}
+      </Popover>
+    )
+  }
+
   if (node.deltaBlock.type === "form") {
-    const { formId, clearOnSubmit } = node.deltaBlock.form as BlockProto.Form
+    const { formId, clearOnSubmit, enterToSubmit, border } = node.deltaBlock
+      .form as BlockProto.Form
     const submitButtons = props.formsData.submitButtons.get(formId)
     const hasSubmitButton =
       submitButtons !== undefined && submitButtons.length > 0
@@ -91,10 +145,12 @@ const BlockNodeRenderer = (props: BlockPropsWithWidth): ReactElement => {
       <Form
         formId={formId}
         clearOnSubmit={clearOnSubmit}
+        enterToSubmit={enterToSubmit}
         width={props.width}
         hasSubmitButton={hasSubmitButton}
         scriptRunState={props.scriptRunState}
         widgetMgr={props.widgetMgr}
+        border={border}
       >
         {child}
       </Form>
@@ -117,7 +173,12 @@ const BlockNodeRenderer = (props: BlockPropsWithWidth): ReactElement => {
       <StyledColumn
         weight={node.deltaBlock.column.weight ?? 0}
         gap={node.deltaBlock.column.gap ?? ""}
-        data-testid="column"
+        verticalAlignment={
+          node.deltaBlock.column.verticalAlignment ?? undefined
+        }
+        showBorder={node.deltaBlock.column.showBorder ?? false}
+        className="stColumn"
+        data-testid="stColumn"
       >
         {child}
       </StyledColumn>
@@ -140,63 +201,181 @@ const BlockNodeRenderer = (props: BlockPropsWithWidth): ReactElement => {
 }
 
 const ChildRenderer = (props: BlockPropsWithWidth): ReactElement => {
+  const { libConfig } = useContext(LibContext)
+
   // Handle cycling of colors for dividers:
   assignDividerColor(props.node, useTheme())
+
+  // Capture all the element ids to avoid rendering the same element twice
+  const elementKeySet = new Set<string>()
+
   return (
     <>
       {props.node.children &&
-        props.node.children.map(
-          (node: AppNode, index: number): ReactElement => {
-            // Base case: render a leaf node.
-            if (node instanceof ElementNode) {
-              // Put node in childProps instead of passing as a node={node} prop in React to
-              // guarantee it doesn't get overwritten by {...childProps}.
-              const childProps = { ...props, node: node as ElementNode }
+        props.node.children.map((node: AppNode, index: number): ReactNode => {
+          const disableFullscreenMode =
+            libConfig.disableFullscreenMode || props.disableFullscreenMode
 
-              const key = getElementWidgetID(node.element) || index
-              return <ElementNodeRenderer key={key} {...childProps} />
+          // Base case: render a leaf node.
+          if (node instanceof ElementNode) {
+            // Put node in childProps instead of passing as a node={node} prop in React to
+            // guarantee it doesn't get overwritten by {...childProps}.
+            const childProps = {
+              ...props,
+              disableFullscreenMode,
+              node: node as ElementNode,
             }
 
-            // Recursive case: render a block, which can contain other blocks
-            // and elements.
-            if (node instanceof BlockNode) {
-              // Put node in childProps instead of passing as a node={node} prop in React to
-              // guarantee it doesn't get overwritten by {...childProps}.
-              const childProps = { ...props, node: node as BlockNode }
-
-              return <BlockNodeRenderer key={index} {...childProps} />
+            const key = getElementId(node.element) || index.toString()
+            // Avoid rendering the same element twice. We assume the first one is the one we want
+            // because the page is rendered top to bottom, so a valid widget would be rendered
+            // correctly and we assume the second one is therefore stale (or throw an error).
+            // Also, our setIn logic pushes stale widgets down in the list of elements, so the
+            // most recent one should always come first.
+            if (elementKeySet.has(key)) {
+              return null
             }
 
-            // We don't have any other node types!
-            throw new Error(`Unrecognized AppNode: ${node}`)
+            elementKeySet.add(key)
+
+            return <ElementNodeRenderer key={key} {...childProps} />
           }
-        )}
+
+          // Recursive case: render a block, which can contain other blocks
+          // and elements.
+          if (node instanceof BlockNode) {
+            // Put node in childProps instead of passing as a node={node} prop in React to
+            // guarantee it doesn't get overwritten by {...childProps}.
+            const childProps = {
+              ...props,
+              disableFullscreenMode,
+              node: node as BlockNode,
+            }
+
+            return <BlockNodeRenderer key={index} {...childProps} />
+          }
+
+          // We don't have any other node types!
+          throw new Error(`Unrecognized AppNode: ${node}`)
+        })}
     </>
+  )
+}
+
+export interface ScrollToBottomVerticalBlockWrapperProps
+  extends StyledVerticalBlockBorderWrapperProps {
+  children: ReactNode
+}
+
+// A wrapper for Vertical Block that adds scrolling with pinned to bottom behavior.
+function ScrollToBottomVerticalBlockWrapper(
+  props: ScrollToBottomVerticalBlockWrapperProps
+): ReactElement {
+  const { border, height, children } = props
+  const scrollContainerRef = useScrollToBottom()
+
+  return (
+    <StyledVerticalBlockBorderWrapper
+      border={border}
+      height={height}
+      data-testid="stVerticalBlockBorderWrapper"
+      data-test-scroll-behavior="scroll-to-bottom"
+      ref={scrollContainerRef as React.RefObject<HTMLDivElement>}
+    >
+      {children}
+    </StyledVerticalBlockBorderWrapper>
   )
 }
 
 // Currently, only VerticalBlocks will ever contain leaf elements. But this is only enforced on the
 // Python side.
 const VerticalBlock = (props: BlockPropsWithoutWidth): ReactElement => {
+  const wrapperElement = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = React.useState(-1)
+
+  const observer = useMemo(
+    () =>
+      new ResizeObserver(([entry]) => {
+        // Since the setWidth will perform changes to the DOM,
+        // we need wrap it in a requestAnimationFrame to avoid this error:
+        // ResizeObserver loop completed with undelivered notifications.
+        window.requestAnimationFrame(() => {
+          // We need to determine the available width here to be able to set
+          // an explicit width for the `StyledVerticalBlock`.
+
+          // The width should never be set to 0 since it can cause
+          // flickering effects.
+          setWidth(entry.target.getBoundingClientRect().width || -1)
+        })
+      }),
+    [setWidth]
+  )
+
+  const border = props.node.deltaBlock.vertical?.border ?? false
+  const height = props.node.deltaBlock.vertical?.height || undefined
+
+  const activateScrollToBottom =
+    height &&
+    props.node.children.find(node => {
+      return (
+        node instanceof BlockNode && node.deltaBlock.type === "chatMessage"
+      )
+    }) !== undefined
+
+  useEffect(() => {
+    if (wrapperElement.current) {
+      observer.observe(wrapperElement.current)
+    }
+    return () => {
+      observer.disconnect()
+    }
+    // We need to update the observer whenever the scrolling is activated or deactivated
+    // Otherwise, it still tries to measure the width of the old wrapper element.
+    // TODO: Update to match React best practices
+    // eslint-disable-next-line react-compiler/react-compiler
+    /* eslint-disable react-hooks/exhaustive-deps */
+  }, [observer, activateScrollToBottom])
+
+  // Decide which wrapper to use based on whether we need to activate scrolling to bottom
+  // This is done for performance reasons, to prevent the usage of useScrollToBottom
+  // if it is not needed.
+  const VerticalBlockBorderWrapper = activateScrollToBottom
+    ? ScrollToBottomVerticalBlockWrapper
+    : StyledVerticalBlockBorderWrapper
+
+  const propsWithNewWidth = {
+    ...props,
+    ...{ width },
+  }
+  // Extract the user-specified key from the block ID (if provided):
+  const userKey = getKeyFromId(props.node.deltaBlock.id)
+
   // Widths of children autosizes to container width (and therefore window width).
   // StyledVerticalBlocks are the only things that calculate their own widths. They should never use
   // the width value coming from the parent via props.
-  return (
-    <AutoSizer
-      disableHeight={true}
-      style={styledVerticalBlockWrapperStyles}
-      nonce={document.currentScript?.nonce || ""}
-    >
-      {({ width }) => {
-        const propsWithNewWidth = { ...props, ...{ width } }
 
-        return (
-          <StyledVerticalBlock width={width} data-testid="stVerticalBlock">
-            <ChildRenderer {...propsWithNewWidth} />
-          </StyledVerticalBlock>
-        )
-      }}
-    </AutoSizer>
+  // To apply a border, we need to wrap the StyledVerticalBlockWrapper again, otherwise the width
+  // calculation would not take the padding into consideration.
+  return (
+    <VerticalBlockBorderWrapper
+      border={border}
+      height={height}
+      data-testid="stVerticalBlockBorderWrapper"
+      data-test-scroll-behavior="normal"
+    >
+      <StyledVerticalBlockWrapper ref={wrapperElement}>
+        <StyledVerticalBlock
+          width={width}
+          className={classNames(
+            "stVerticalBlock",
+            convertKeyToClassName(userKey)
+          )}
+          data-testid="stVerticalBlock"
+        >
+          <ChildRenderer {...propsWithNewWidth} />
+        </StyledVerticalBlock>
+      </StyledVerticalBlockWrapper>
+    </VerticalBlockBorderWrapper>
   )
 }
 
@@ -207,7 +386,11 @@ const HorizontalBlock = (props: BlockPropsWithWidth): ReactElement => {
   const gap = props.node.deltaBlock.horizontal?.gap ?? ""
 
   return (
-    <StyledHorizontalBlock gap={gap} data-testid="stHorizontalBlock">
+    <StyledHorizontalBlock
+      gap={gap}
+      className="stHorizontalBlock"
+      data-testid="stHorizontalBlock"
+    >
       <ChildRenderer {...props} />
     </StyledHorizontalBlock>
   )

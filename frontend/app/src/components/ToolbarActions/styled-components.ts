@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,13 +29,15 @@ export interface StyledActionButtonIconProps {
 }
 
 export const StyledActionButtonIcon = styled.div<StyledActionButtonIconProps>(
-  ({ icon }) => ({
+  ({ theme, icon }) => ({
     background: `url("${icon}") no-repeat center / contain`,
-
-    // NOTE: We intentionally don't use any of the preset theme iconSizes here
-    // so that icon scaling is unchanged from what we receive from the
-    // withHostCommunication hoc.
-    width: "1rem",
-    height: "1rem",
+    width: theme.iconSizes.base,
+    height: theme.iconSizes.base,
   })
 )
+
+export const StyledToolbarActions = styled.div(({}) => ({
+  display: "flex",
+  alignItems: "center",
+  flexDirection: "row",
+}))

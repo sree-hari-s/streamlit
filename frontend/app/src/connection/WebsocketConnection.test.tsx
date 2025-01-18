@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,31 +14,33 @@
  * limitations under the License.
  */
 
-import axios from "axios"
-import { WS } from "jest-websocket-mock"
-import { zip } from "lodash"
 import React, { Fragment } from "react"
 
-import { ConnectionState } from "@streamlit/app/src/connection/ConnectionState"
+import axios from "axios"
+import { default as WS } from "vitest-websocket-mock"
+import zip from "lodash/zip"
+
 import {
-  SessionInfo,
+  BackMsg,
   mockEndpoints,
   mockSessionInfoProps,
-  BackMsg,
+  SessionInfo,
 } from "@streamlit/lib"
+import { ConnectionState } from "@streamlit/app/src/connection/ConnectionState"
 import {
-  CORS_ERROR_MESSAGE_DOCUMENTATION_LINK,
-  StyledBashCode,
-  WebsocketConnection,
-  doInitPings,
   Args,
+  WebsocketConnection,
 } from "@streamlit/app/src/connection/WebsocketConnection"
+import { CORS_ERROR_MESSAGE_DOCUMENTATION_LINK } from "@streamlit/app/src/connection/constants"
+import { doInitPings } from "@streamlit/app/src/connection/DoInitPings"
 
-const MOCK_ALLOWED_ORIGINS_RESPONSE = {
-  data: {
-    allowedOrigins: ["list", "of", "allowed", "origins"],
-    useExternalAuthToken: false,
-  },
+const MOCK_ALLOWED_ORIGINS_CONFIG = {
+  allowedOrigins: ["list", "of", "allowed", "origins"],
+  useExternalAuthToken: false,
+}
+
+const MOCK_HOST_CONFIG_RESPONSE = {
+  data: MOCK_ALLOWED_ORIGINS_CONFIG,
 }
 
 const MOCK_HEALTH_RESPONSE = { status: "ok" }
@@ -55,12 +57,12 @@ function createMockArgs(overrides?: Partial<Args>): Args {
         basePath: "/",
       },
     ],
-    onMessage: jest.fn(),
-    onConnectionStateChange: jest.fn(),
-    onRetry: jest.fn(),
+    onMessage: vi.fn(),
+    onConnectionStateChange: vi.fn(),
+    onRetry: vi.fn(),
     claimHostAuthToken: () => Promise.resolve(undefined),
-    resetHostAuthToken: jest.fn(),
-    setAllowedOriginsResp: jest.fn(),
+    resetHostAuthToken: vi.fn(),
+    onHostConfigResp: vi.fn(),
     ...overrides,
   }
 }
@@ -73,107 +75,101 @@ describe("doInitPings", () => {
     ],
     timeoutMs: 10,
     maxTimeoutMs: 100,
-    retryCallback: jest.fn(),
-    setAllowedOriginsResp: jest.fn(),
-    userCommandLine: "streamlit run not-a-real-script.py",
+    retryCallback: vi.fn(),
+    setAllowedOrigins: vi.fn(),
   }
 
   let originalAxiosGet: any
-  let originalPromiseAll: any
 
   beforeEach(() => {
     originalAxiosGet = axios.get
-    axios.get = jest.fn()
-    MOCK_PING_DATA.retryCallback = jest.fn()
-    MOCK_PING_DATA.setAllowedOriginsResp = jest.fn()
-    originalPromiseAll = Promise.all
+    MOCK_PING_DATA.retryCallback = vi.fn()
+    MOCK_PING_DATA.setAllowedOrigins = vi.fn()
   })
 
   afterEach(() => {
     axios.get = originalAxiosGet
-    Promise.all = originalPromiseAll
   })
 
   it("calls the /_stcore/health endpoint when pinging server", async () => {
-    axios.get = jest.fn().mockImplementation(url => {
-      if (url.endsWith("_stcore/health")) {
-        return MOCK_HEALTH_RESPONSE
-      }
-      if (url.endsWith("_stcore/allowed-message-origins")) {
-        return MOCK_ALLOWED_ORIGINS_RESPONSE
-      }
-      return {}
-    })
+    axios.get = vi
+      .fn()
+      .mockResolvedValueOnce(MOCK_HEALTH_RESPONSE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     const uriIndex = await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
     expect(uriIndex).toEqual(0)
-    expect(MOCK_PING_DATA.setAllowedOriginsResp).toHaveBeenCalledWith(
-      MOCK_ALLOWED_ORIGINS_RESPONSE.data
+    expect(MOCK_PING_DATA.setAllowedOrigins).toHaveBeenCalledWith(
+      MOCK_ALLOWED_ORIGINS_CONFIG
     )
   })
 
-  it("returns the uri index and sets allowedOrigins for the first successful ping (0)", async () => {
-    Promise.all = jest
+  it("returns the uri index and sets hostConfig for the first successful ping (0)", async () => {
+    axios.get = vi
       .fn()
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     const uriIndex = await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
     expect(uriIndex).toEqual(0)
-    expect(MOCK_PING_DATA.setAllowedOriginsResp).toHaveBeenCalledWith(
-      MOCK_ALLOWED_ORIGINS_RESPONSE.data
+    expect(MOCK_PING_DATA.setAllowedOrigins).toHaveBeenCalledWith(
+      MOCK_ALLOWED_ORIGINS_CONFIG
     )
   })
 
-  it("returns the uri index and sets allowedOrigins for the first successful ping (1)", async () => {
-    Promise.all = jest
+  it("returns the uri index and sets hostConfig for the first successful ping (1)", async () => {
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(new Error(""))
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     const uriIndex = await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
     expect(uriIndex).toEqual(1)
-    expect(MOCK_PING_DATA.setAllowedOriginsResp).toHaveBeenCalledWith(
-      MOCK_ALLOWED_ORIGINS_RESPONSE.data
+    expect(MOCK_PING_DATA.setAllowedOrigins).toHaveBeenCalledWith(
+      MOCK_ALLOWED_ORIGINS_CONFIG
     )
   })
 
   it("calls retry with the corresponding error message if there was an error", async () => {
     const TEST_ERROR_MESSAGE = "ERROR_MESSAGE"
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(new Error(TEST_ERROR_MESSAGE))
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledWith(
@@ -186,19 +182,21 @@ describe("doInitPings", () => {
   it("calls retry with 'Connection timed out.' when the error code is `ECONNABORTED`", async () => {
     const TEST_ERROR = { code: "ECONNABORTED" }
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledWith(
@@ -215,19 +213,21 @@ describe("doInitPings", () => {
       },
     }
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledWith(
@@ -242,19 +242,21 @@ describe("doInitPings", () => {
       request: {},
     }
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledWith(
@@ -279,38 +281,26 @@ describe("doInitPings", () => {
       },
     }
 
-    const NoResponse = (
-      <Fragment>
-        <p>
-          Is Streamlit still running? If you accidentally stopped Streamlit,
-          just restart it in your terminal:
-        </p>
-        <pre>
-          <StyledBashCode>
-            {MOCK_PING_DATA_LOCALHOST.userCommandLine}
-          </StyledBashCode>
-        </pre>
-      </Fragment>
-    )
-
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA_LOCALHOST.uri,
       MOCK_PING_DATA_LOCALHOST.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA_LOCALHOST.retryCallback,
-      MOCK_PING_DATA_LOCALHOST.setAllowedOriginsResp,
-      MOCK_PING_DATA_LOCALHOST.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA_LOCALHOST.retryCallback).toHaveBeenCalledWith(
       1,
-      NoResponse,
+      expect.anything(),
       expect.anything()
     )
   })
@@ -333,19 +323,21 @@ describe("doInitPings", () => {
       </Fragment>
     )
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledWith(
@@ -363,19 +355,21 @@ describe("doInitPings", () => {
       },
     }
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledWith(
@@ -388,23 +382,33 @@ describe("doInitPings", () => {
   it("calls retry with correct total tries", async () => {
     const TEST_ERROR_MESSAGE = "TEST_ERROR_MESSAGE"
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Third Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fourth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fifth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Final Attempt (to avoid infinite loop)
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     await doInitPings(
       MOCK_PING_DATA.uri,
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       MOCK_PING_DATA.retryCallback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(MOCK_PING_DATA.retryCallback).toHaveBeenCalledTimes(5)
@@ -413,15 +417,26 @@ describe("doInitPings", () => {
   it("has increasing but capped retry backoff", async () => {
     const TEST_ERROR_MESSAGE = "TEST_ERROR_MESSAGE"
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Third Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fourth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fifth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Final Attempt (to avoid infinite loop)
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     const timeouts: number[] = []
     const callback = (
@@ -437,8 +452,7 @@ describe("doInitPings", () => {
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       callback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(timeouts.length).toEqual(5)
@@ -456,15 +470,26 @@ describe("doInitPings", () => {
   it("backs off independently for each target url", async () => {
     const TEST_ERROR_MESSAGE = "TEST_ERROR_MESSAGE"
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Third Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fourth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fifth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Final Attempt (to avoid infinite loop)
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     const timeouts: number[] = []
     const callback = (
@@ -480,8 +505,7 @@ describe("doInitPings", () => {
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       callback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(timeouts.length).toEqual(5)
@@ -494,16 +518,26 @@ describe("doInitPings", () => {
   it("resets timeout each ping call", async () => {
     const TEST_ERROR_MESSAGE = "TEST_ERROR_MESSAGE"
 
-    Promise.all = jest
+    axios.get = vi
       .fn()
+      // First Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Second Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
-      // Reset after second doInitPings call
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Third Connection attempt (successful)
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fourth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Fifth Connection attempt
       .mockRejectedValueOnce(TEST_ERROR_MESSAGE)
-      // The promise should be resolved to avoid an infinite loop.
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
+      // Final Attempt (to avoid infinite loop)
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     const timeouts: number[] = []
     const callback = (
@@ -519,8 +553,7 @@ describe("doInitPings", () => {
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       callback,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     const timeouts2: number[] = []
@@ -537,8 +570,7 @@ describe("doInitPings", () => {
       MOCK_PING_DATA.timeoutMs,
       MOCK_PING_DATA.maxTimeoutMs,
       callback2,
-      MOCK_PING_DATA.setAllowedOriginsResp,
-      MOCK_PING_DATA.userCommandLine
+      MOCK_PING_DATA.setAllowedOrigins
     )
 
     expect(timeouts[0]).toEqual(10)
@@ -550,27 +582,22 @@ describe("doInitPings", () => {
 describe("WebsocketConnection", () => {
   let client: WebsocketConnection
   let server: WS
-
   let originalAxiosGet: any
-  let originalPromiseAll: any
 
   beforeEach(() => {
-    server = new WS("localhost:1234")
+    server = new WS("ws://localhost:1234/_stcore/stream")
 
     originalAxiosGet = axios.get
-    axios.get = jest.fn()
-
-    originalPromiseAll = Promise.all
-    Promise.all = jest
+    axios.get = vi
       .fn()
-      .mockResolvedValueOnce(["", MOCK_ALLOWED_ORIGINS_RESPONSE])
+      .mockResolvedValueOnce("")
+      .mockResolvedValueOnce(MOCK_HOST_CONFIG_RESPONSE)
 
     client = new WebsocketConnection(createMockArgs())
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     axios.get = originalAxiosGet
-    Promise.all = originalPromiseAll
 
     // @ts-expect-error
     if (client.websocket) {
@@ -590,7 +617,7 @@ describe("WebsocketConnection", () => {
   })
 
   it("increments message cache run count", () => {
-    const incrementRunCountSpy = jest.spyOn(
+    const incrementRunCountSpy = vi.spyOn(
       // @ts-expect-error
       client.cache,
       "incrementRunCount"
@@ -602,9 +629,10 @@ describe("WebsocketConnection", () => {
     expect(incrementRunCountSpy).toHaveBeenCalledWith(TEST_MAX_MESSAGE_AGE)
   })
 
-  it("sends message with correct arguments", () => {
+  it("sends message with correct arguments", async () => {
+    await server.connected
     // @ts-expect-error
-    const sendSpy = jest.spyOn(client.websocket, "send")
+    const sendSpy = vi.spyOn(client.websocket, "send")
 
     const TEST_BACK_MSG = {}
     client.sendMessage(TEST_BACK_MSG)
@@ -634,33 +662,41 @@ describe("WebsocketConnection", () => {
 describe("WebsocketConnection auth token handling", () => {
   let originalAxiosGet: any
   let websocketSpy: any
+  let server: WS
 
   beforeEach(() => {
-    websocketSpy = jest.spyOn(window, "WebSocket")
+    server = new WS("ws://localhost:1234/_stcore/stream")
+    websocketSpy = vi.spyOn(window, "WebSocket")
 
     originalAxiosGet = axios.get
-    axios.get = jest.fn()
+    axios.get = vi.fn()
   })
 
   afterEach(() => {
     axios.get = originalAxiosGet
+
+    server.close()
   })
 
   it("always sets first Sec-WebSocket-Protocol option to 'streamlit'", async () => {
-    const resetHostAuthToken = jest.fn()
+    const resetHostAuthToken = vi.fn()
     const ws = new WebsocketConnection(createMockArgs({ resetHostAuthToken }))
+
+    // Set correct state for this action
+    // @ts-expect-error
+    ws.state = ConnectionState.CONNECTING
     // @ts-expect-error
     await ws.connectToWebSocket()
 
     expect(websocketSpy).toHaveBeenCalledWith(
       "ws://localhost:1234/_stcore/stream",
-      ["streamlit"]
+      ["streamlit", "PLACEHOLDER_AUTH_TOKEN"]
     )
     expect(resetHostAuthToken).toHaveBeenCalledTimes(1)
   })
 
   it("sets second Sec-WebSocket-Protocol option to value from claimHostAuthToken", async () => {
-    const resetHostAuthToken = jest.fn()
+    const resetHostAuthToken = vi.fn()
     const ws = new WebsocketConnection(
       createMockArgs({
         claimHostAuthToken: () => Promise.resolve("iAmAnAuthToken"),
@@ -668,6 +704,9 @@ describe("WebsocketConnection auth token handling", () => {
       })
     )
 
+    // Set correct state for this action
+    // @ts-expect-error
+    ws.state = ConnectionState.CONNECTING
     // @ts-expect-error
     await ws.connectToWebSocket()
 
@@ -677,7 +716,7 @@ describe("WebsocketConnection auth token handling", () => {
     )
   })
 
-  it("sets second Sec-WebSocket-Protocol option to lastSessionId", async () => {
+  it("sets third Sec-WebSocket-Protocol option to lastSessionId if available", async () => {
     // Create a mock SessionInfo with sessionInfo.last.sessionId == "lastSessionId"
     const sessionInfo = new SessionInfo()
     sessionInfo.setCurrent(
@@ -688,17 +727,20 @@ describe("WebsocketConnection auth token handling", () => {
 
     const ws = new WebsocketConnection(createMockArgs({ sessionInfo }))
 
+    // Set correct state for this action
+    // @ts-expect-error
+    ws.state = ConnectionState.CONNECTING
     // @ts-expect-error
     await ws.connectToWebSocket()
 
     // "lastSessionId" should be the WebSocket's session token
     expect(websocketSpy).toHaveBeenCalledWith(
       "ws://localhost:1234/_stcore/stream",
-      ["streamlit", "lastSessionId"]
+      ["streamlit", "PLACEHOLDER_AUTH_TOKEN", "lastSessionId"]
     )
   })
 
-  it("prioritizes host provided auth token over lastSessionId if both set", async () => {
+  it("sets both host provided auth token and lastSessionId if both set", async () => {
     // Create a mock SessionInfo with sessionInfo.last.sessionId == "lastSessionId"
     const sessionInfo = new SessionInfo()
     sessionInfo.setCurrent(
@@ -707,7 +749,7 @@ describe("WebsocketConnection auth token handling", () => {
     sessionInfo.setCurrent(mockSessionInfoProps())
     expect(sessionInfo.last?.sessionId).toBe("lastSessionId")
 
-    const resetHostAuthToken = jest.fn()
+    const resetHostAuthToken = vi.fn()
     const ws = new WebsocketConnection(
       createMockArgs({
         sessionInfo,
@@ -716,12 +758,16 @@ describe("WebsocketConnection auth token handling", () => {
       })
     )
 
+    // Set correct state for this action
+    // @ts-expect-error
+    ws.state = ConnectionState.CONNECTING
+
     // @ts-expect-error
     await ws.connectToWebSocket()
 
     expect(websocketSpy).toHaveBeenCalledWith(
       "ws://localhost:1234/_stcore/stream",
-      ["streamlit", "iAmAnAuthToken"]
+      ["streamlit", "iAmAnAuthToken", "lastSessionId"]
     )
     expect(resetHostAuthToken).toHaveBeenCalledTimes(1)
   })

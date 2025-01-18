@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,11 @@
  */
 
 import React from "react"
+
 import {
+  DataEditorProps,
   EditableGridCell,
   GridCell,
-  DataEditorProps,
   GridSelection,
   Item,
   ValidatedGridCell,
@@ -50,8 +51,9 @@ type DataEditorReturn = Pick<
  * @param getCellContent - Function to get a specific cell.
  * @param getOriginalIndex - Function to map a row ID of the current state to the original row ID.
  *                           This mainly changed by sorting of columns.
+ * @param updateNumRows - Callback to sync the number of rows from editing state with the component state.
  * @param refreshCells - Callback that allows to trigger a UI refresh of a selection of cells.
- * @param applyEdits - Callback that needs to be called on all edits. This will also trigger a rerun
+ * @param syncEditState - Callback that needs to be called on all edits. This will also trigger a rerun
  *                     and send widget state to the backend.
  *
  * @returns Glide-data-grid compatible functions for editing capabilities.
@@ -67,7 +69,9 @@ function useDataEditor(
       cell: [number, number]
     }[]
   ) => void,
-  applyEdits: (clearSelection?: boolean, triggerRerun?: boolean) => void
+  updateNumRows: () => void,
+  syncEditState: () => void,
+  clearSelection: () => void
 ): DataEditorReturn {
   const onCellEdited = React.useCallback(
     (
@@ -104,14 +108,14 @@ function useDataEditor(
           lastUpdated: performance.now(),
         })
 
-        applyEdits()
+        syncEditState()
       } else {
         logWarning(
           `Not applying the cell edit since it causes this error:\n ${newCell.data}`
         )
       }
     },
-    [columns, editingState, getOriginalIndex, getCellContent, applyEdits]
+    [columns, editingState, getOriginalIndex, getCellContent, syncEditState]
   )
 
   /**
@@ -130,7 +134,8 @@ function useDataEditor(
       newRow.set(column.indexNumber, column.getCell(column.defaultValue))
     })
     editingState.current.addRow(newRow)
-  }, [columns, editingState, fixedNumRows])
+    updateNumRows()
+  }, [columns, editingState, fixedNumRows, updateNumRows])
 
   /**
    * Callback used by glide-data-grid when the user adds a new row in the table UI.
@@ -142,8 +147,8 @@ function useDataEditor(
     }
 
     appendEmptyRow()
-    applyEdits()
-  }, [appendEmptyRow, applyEdits, fixedNumRows])
+    syncEditState()
+  }, [appendEmptyRow, syncEditState, fixedNumRows])
 
   /**
    * Callback used by glide-data-grid when the user deletes a row or cell value in the table UI.
@@ -164,7 +169,9 @@ function useDataEditor(
         })
         // We need to delete all rows at once, so that the indexes work correct
         editingState.current.deleteRows(rowsToDelete)
-        applyEdits(true)
+        updateNumRows()
+        clearSelection()
+        syncEditState()
         return false
       }
       if (selection.current?.range) {
@@ -196,7 +203,7 @@ function useDataEditor(
         }
 
         if (updatedCells.length > 0) {
-          applyEdits()
+          syncEditState()
           refreshCells(updatedCells)
         }
         return false
@@ -209,8 +216,10 @@ function useDataEditor(
       fixedNumRows,
       refreshCells,
       getOriginalIndex,
-      applyEdits,
+      syncEditState,
       onCellEdited,
+      clearSelection,
+      updateNumRows,
     ]
   )
 
@@ -249,6 +258,7 @@ function useDataEditor(
           // Only add to columns that are editable:
           if (column.isEditable) {
             const newCell = column.getCell(pasteDataValue, true)
+
             // We are not editing cells if the pasted value leads to an error:
             if (notNullOrUndefined(newCell) && !isErrorCell(newCell)) {
               const originalCol = column.indexNumber
@@ -275,7 +285,7 @@ function useDataEditor(
         }
 
         if (updatedCells.length > 0) {
-          applyEdits()
+          syncEditState()
           refreshCells(updatedCells)
         }
       }
@@ -289,7 +299,7 @@ function useDataEditor(
       getOriginalIndex,
       getCellContent,
       appendEmptyRow,
-      applyEdits,
+      syncEditState,
       refreshCells,
     ]
   )

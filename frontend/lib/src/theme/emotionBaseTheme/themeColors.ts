@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  */
 
 import { transparentize } from "color2k"
+
 import { colors } from "@streamlit/lib/src/theme/primitives/colors"
 
 const requiredThemeColors = {
@@ -43,6 +44,7 @@ const requiredThemeColors = {
 }
 
 interface OptionalThemeColors {
+  skeletonBackgroundColor?: string
   widgetBackgroundColor?: string
   widgetBorderColor?: string
 }

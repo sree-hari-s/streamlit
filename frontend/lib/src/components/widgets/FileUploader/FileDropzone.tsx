@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,9 @@
  */
 
 import React from "react"
+
 import Dropzone, { FileRejection } from "react-dropzone"
+
 import BaseButton, {
   BaseButtonKind,
   BaseButtonSize,
@@ -54,11 +56,14 @@ const FileDropzone = ({
     {({ getRootProps, getInputProps }) => (
       <StyledFileDropzoneSection
         {...getRootProps()}
-        data-testid="stFileUploadDropzone"
+        data-testid="stFileUploaderDropzone"
         isDisabled={disabled}
         aria-label={label}
       >
-        <input {...getInputProps()} />
+        <input
+          data-testid="stFileUploaderDropzoneInput"
+          {...getInputProps()}
+        />
         <FileDropzoneInstructions
           multiple={multiple}
           acceptedExtensions={acceptedExtensions}

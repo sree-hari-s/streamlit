@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,54 @@
  * limitations under the License.
  */
 
+import { CSSObject, Theme } from "@emotion/react"
 import styled from "@emotion/styled"
+
+const codeLink: CSSObject = {
+  // Streamline the style when inside anchors to avoid broken underline and more
+  "a > &": {
+    color: "inherit",
+  },
+}
+
+export const StyledInlineCode = styled.code(({ theme }) => ({
+  padding: "0.2em 0.4em",
+  wordWrap: "break-word",
+  margin: 0,
+  borderRadius: theme.radii.md,
+  background: theme.colors.codeHighlightColor,
+  color: theme.colors.codeTextColor,
+  fontFamily: theme.genericFonts.codeFont,
+  // Use em here so that it works correctly within captions
+  fontSize: "0.75em",
+
+  ...codeLink,
+}))
+
+const codeBlockStyle = (theme: Theme): CSSObject => ({
+  background: "transparent",
+  border: 0,
+  color: "inherit",
+  display: "inline",
+  fontFamily: theme.genericFonts.codeFont,
+  fontSize: theme.fontSizes.sm,
+  lineHeight: "inherit",
+  margin: 0,
+  overflowX: "auto",
+  padding: 0,
+  whiteSpace: "pre",
+  wordBreak: "normal",
+  wordWrap: "normal",
+  ...codeLink,
+})
+
+export const StyledCode = styled.code(({ theme }) => ({
+  ...codeBlockStyle(theme),
+}))
+
+interface StyledPreProps {
+  height?: number
+}
 
 /*
   This is the default prism.js theme for JavaScript, CSS and HTML, but
@@ -22,11 +69,29 @@ import styled from "@emotion/styled"
 
   See https://prismjs.com/download.html#themes=prism&languages=markup+css+clike+javascript
 */
-export const StyledPre = styled.pre(({ theme }) => ({
-  margin: 0,
-  paddingRight: "2.75rem",
+export const StyledPre = styled.pre<StyledPreProps>(({ theme, height }) => ({
+  height: height ? `${height}px` : undefined,
+  background: theme.colors.codeHighlightColor,
+  borderRadius: theme.radii.default,
   color: theme.colors.bodyText,
-  borderRadius: theme.radii.lg,
+  fontSize: theme.fontSizes.twoSm,
+  fontFamily: theme.genericFonts.codeFont,
+  display: "block",
+  // Remove browser default top margin
+  margin: 0,
+  // Disable auto-hiding scrollbar in legacy Edge to avoid overlap,
+  // making it impossible to interact with the content
+  msOverflowStyle: "scrollbar",
+
+  // Don't allow content to break outside
+  overflow: "auto",
+
+  // Add padding around the code
+  padding: theme.spacing.lg,
+  // Add padding to the right to account for the copy button
+  paddingRight: theme.iconSizes.threeXL,
+
+  code: { ...codeBlockStyle(theme) },
 
   // The token can consist of many lines, e.g. a triple-quote string, so
   // we need to make sure that the color is not overwritten.
@@ -34,16 +99,23 @@ export const StyledPre = styled.pre(({ theme }) => ({
     color: theme.colors.fadedText40,
     fontSize: theme.fontSizes.twoSm,
 
+    // Center-align number vertically, or they'll be positioned differently when
+    // wrapLinst=true. Even with this change, though, the position is still ~2px
+    // off.
+    // NOTE: The alignSelf below only apply applies when wrapLines=true, because
+    // that option wraps this element in a flex container.
+    alignSelf: "center",
+
     // Override the default token's min-width, to ensure it fits 3-digit lines
     minWidth: `${theme.spacing.threeXL} !important`,
   },
 
   ".token.comment, .token.prolog, .token.doctype, .token.cdata": {
-    color: "slategray",
+    color: theme.colors.gray70,
   },
 
   ".token.punctuation": {
-    color: "#999",
+    color: theme.colors.gray70,
   },
 
   ".namespace": {
@@ -84,12 +156,12 @@ export const StyledPre = styled.pre(({ theme }) => ({
 
   ".token.function, .token.class-name, .token.selector": {
     color: theme.colors.blue70,
-    fontWeight: "bold",
+    fontWeight: theme.fontWeights.extrabold,
   },
 
   ".token.important": {
     color: theme.colors.red70,
-    fontWeight: "bold",
+    fontWeight: theme.fontWeights.extrabold,
   },
 
   ".token.comment": {
@@ -103,6 +175,19 @@ export const StyledPre = styled.pre(({ theme }) => ({
 
   ".token.entity": {
     cursor: "help",
+  },
+
+  /**
+   * Diff syntax highlighting
+   */
+  ".token.deleted.line, .token.deleted.prefix": {
+    color: theme.colors.red70,
+  },
+  ".token.inserted.line, .token.inserted.prefix": {
+    color: theme.colors.green70,
+  },
+  ".token.unchanged.line": {
+    color: theme.colors.gray70,
   },
 }))
 
@@ -123,39 +208,28 @@ export const StyledCopyButtonContainer = styled.div(({ theme }) => ({
   pointerEvents: "none",
 }))
 
-export interface StyledCodeBlockProps {
-  /**
-   * The code-block behaves a bit differently if it is
-   * used inside markdown.
-   */
-  isMarkdown: boolean
-}
+export const StyledCodeBlock = styled.div(({ theme }) => ({
+  position: "relative",
+  marginLeft: theme.spacing.none,
+  marginRight: theme.spacing.none,
+  marginTop: theme.spacing.none,
+  marginBottom: undefined,
 
-export const StyledCodeBlock = styled.div<StyledCodeBlockProps>(
-  ({ theme, isMarkdown }) => ({
-    position: "relative",
-    marginLeft: theme.spacing.none,
-    marginRight: theme.spacing.none,
-    marginTop: theme.spacing.none,
-    marginBottom: isMarkdown ? theme.spacing.lg : undefined,
-
-    "&:hover": {
-      [`${StyledCopyButtonContainer}`]: {
-        opacity: 1,
-      },
+  "&:hover": {
+    [`${StyledCopyButtonContainer}`]: {
+      opacity: 1,
     },
-  })
-)
+  },
+}))
 
 export const StyledCopyButton = styled.button(({ theme }) => ({
   pointerEvents: "auto",
-  height: "2.5rem",
-  padding: 0,
-  width: "2.5rem",
+  height: theme.iconSizes.threeXL,
+  width: theme.iconSizes.threeXL,
+  padding: theme.spacing.none,
   border: "none",
   backgroundColor: theme.colors.transparent,
   color: theme.colors.fadedText60,
-  borderRadius: theme.radii.xl,
   transform: "scale(0)",
 
   [`${StyledCodeBlock}:hover &, &:active, &:focus, &:hover`]: {

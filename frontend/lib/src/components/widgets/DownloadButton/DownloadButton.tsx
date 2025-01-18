@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,18 @@
  */
 
 import React, { ReactElement } from "react"
+
+import createDownloadLinkElement from "@streamlit/lib/src/util/createDownloadLinkElement"
 import { DownloadButton as DownloadButtonProto } from "@streamlit/lib/src/proto"
 import BaseButton, {
-  BaseButtonTooltip,
   BaseButtonKind,
   BaseButtonSize,
+  BaseButtonTooltip,
+  DynamicButtonLabel,
 } from "@streamlit/lib/src/components/shared/BaseButton"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
-import StreamlitMarkdown from "@streamlit/lib/src/components/shared/StreamlitMarkdown"
 import { StreamlitEndpoints } from "@streamlit/lib/src/StreamlitEndpoints"
+import { LibContext } from "@streamlit/lib/src/components/core/LibContext"
 
 export interface Props {
   endpoints: StreamlitEndpoints
@@ -31,25 +34,44 @@ export interface Props {
   element: DownloadButtonProto
   widgetMgr: WidgetStateManager
   width: number
+  fragmentId?: string
+}
+
+export function createDownloadLink(
+  endpoints: StreamlitEndpoints,
+  url: string,
+  enforceDownloadInNewTab: boolean
+): HTMLAnchorElement {
+  return createDownloadLinkElement({
+    enforceDownloadInNewTab,
+    url: endpoints.buildMediaURL(url),
+    filename: "",
+  })
 }
 
 function DownloadButton(props: Props): ReactElement {
-  const { disabled, element, widgetMgr, width, endpoints } = props
+  const { disabled, element, widgetMgr, width, endpoints, fragmentId } = props
   const style = { width }
+  const {
+    libConfig: { enforceDownloadInNewTab = false }, // Default to false, if no libConfig, e.g. for tests
+  } = React.useContext(LibContext)
 
-  const kind =
-    element.type === "primary"
-      ? BaseButtonKind.PRIMARY
-      : BaseButtonKind.SECONDARY
+  let kind = BaseButtonKind.SECONDARY
+  if (element.type === "primary") {
+    kind = BaseButtonKind.PRIMARY
+  } else if (element.type === "tertiary") {
+    kind = BaseButtonKind.TERTIARY
+  }
 
   const handleDownloadClick: () => void = () => {
     // Downloads are only done on links, so create a hidden one and click it
     // for the user.
-    widgetMgr.setTriggerValue(element, { fromUi: true })
-    const link = document.createElement("a")
-    const uri = endpoints.buildMediaURL(element.url)
-    link.setAttribute("href", uri)
-    link.setAttribute("target", "_blank")
+    widgetMgr.setTriggerValue(element, { fromUi: true }, fragmentId)
+    const link = createDownloadLink(
+      endpoints,
+      element.url,
+      enforceDownloadInNewTab
+    )
     link.click()
   }
 
@@ -59,7 +81,7 @@ function DownloadButton(props: Props): ReactElement {
 
   return (
     <div
-      className="row-widget stDownloadButton"
+      className="stDownloadButton"
       data-testid="stDownloadButton"
       style={style}
     >
@@ -71,13 +93,7 @@ function DownloadButton(props: Props): ReactElement {
           onClick={handleDownloadClick}
           fluidWidth={element.useContainerWidth ? fluidWidth : false}
         >
-          <StreamlitMarkdown
-            source={element.label}
-            allowHTML={false}
-            isLabel
-            largerLabel
-            disableLinks
-          />
+          <DynamicButtonLabel icon={element.icon} label={element.label} />
         </BaseButton>
       </BaseButtonTooltip>
     </div>

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,15 +15,20 @@
  */
 
 import React from "react"
-import { mount } from "@streamlit/lib/src/test_util"
+
+import { screen, within } from "@testing-library/react"
+
+import { render } from "@streamlit/lib/src/test_util"
 import { BlockNode } from "@streamlit/lib/src/AppNode"
 import { Block as BlockProto } from "@streamlit/lib/src/proto"
 
-import { Tabs as UITabs } from "baseui/tabs-motion"
 import Tabs, { TabProps } from "./Tabs"
+
+const FAKE_SCRIPT_HASH = "fake_script_hash"
 
 function makeTab(label: string, children: BlockNode[] = []): BlockNode {
   return new BlockNode(
+    FAKE_SCRIPT_HASH,
     children,
     new BlockProto({ allowEmpty: true, tab: { label } })
   )
@@ -31,6 +36,7 @@ function makeTab(label: string, children: BlockNode[] = []): BlockNode {
 
 function makeTabsNode(tabs: number): BlockNode {
   return new BlockNode(
+    FAKE_SCRIPT_HASH,
     Array.from({ length: tabs }, (_element, index) => makeTab(`Tab ${index}`)),
     new BlockProto({ allowEmpty: true })
   )
@@ -42,31 +48,43 @@ const getProps = (props?: Partial<TabProps>): TabProps =>
     node: makeTabsNode(5),
     isStale: false,
     ...props,
-    renderTabContent: jest.fn(),
+    renderTabContent: vi.fn(),
   })
 
 describe("st.tabs", () => {
   it("renders without crashing", () => {
-    const wrapper = mount(<Tabs {...getProps()} />)
-    expect(wrapper.find(UITabs).exists()).toBe(true)
-    expect(wrapper.find("StyledTab").length).toBe(5)
+    render(<Tabs {...getProps()} />)
+
+    const tabsElement = screen.getByTestId("stTabs")
+    expect(tabsElement).toBeInTheDocument()
+    expect(tabsElement).toHaveClass("stTabs")
+
+    const tabsContainer = screen.getByRole("tablist")
+    expect(tabsContainer).toBeInTheDocument()
+    const tabs = within(tabsContainer).getAllByRole("tab")
+    expect(tabs).toHaveLength(5)
   })
 
   it("sets the tab labels correctly", () => {
-    const wrapper = mount(<Tabs {...getProps()} />)
+    render(<Tabs {...getProps()} />)
+    const tabs = screen.getAllByRole("tab")
+    expect(tabs).toHaveLength(5)
 
-    expect(wrapper.find("StyledTab").length).toBe(5)
-    wrapper.find("StyledTab").forEach((option, index) => {
-      expect(option.text()).toBe(`Tab ${index}`)
+    tabs.forEach((tab, index) => {
+      expect(tab).toHaveTextContent(`Tab ${index}`)
     })
   })
 
   it("can be disabled", () => {
-    const wrapper = mount(<Tabs {...getProps({ widgetsDisabled: true })} />)
+    render(<Tabs {...getProps({ widgetsDisabled: true })} />)
+    const tabs = screen.getAllByRole("tab")
 
-    wrapper.find("StyledTab").forEach((option, index) => {
+    tabs.forEach((_, index) => {
       // the selected tab does not have the disabled prop as true in baseweb
-      expect(option.prop("disabled")).toBe(index !== 0)
+      if (index == 0) {
+        return
+      }
+      expect(tabs[index]).toBeDisabled()
     })
   })
 })

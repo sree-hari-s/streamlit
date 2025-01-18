@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,13 +22,17 @@ export const COMMUNITY_URL = "https://discuss.streamlit.io"
 
 /** The URL customers are directed to for troubleshooting components. */
 export const COMPONENT_DEVELOPER_URL =
-  "https://docs.streamlit.io/library/components"
+  "https://docs.streamlit.io/develop/concepts/custom-components"
 
 /** The URL customers are directed to for troubleshooting camera permissions. */
 export const CAMERA_PERMISSION_URL =
   "https://docs.streamlit.io/knowledge-base/using-streamlit/enable-camera"
 
 export const STREAMLIT_COMMUNITY_CLOUD_DOCS_URL =
-  "https://docs.streamlit.io/streamlit-community-cloud/get-started"
+  "https://share.streamlit.io/cloud-getting-started"
 export const STREAMLIT_DEPLOY_TUTORIAL_URL =
-  "https://docs.streamlit.io/knowledge-base/tutorials/deploy"
+  "https://share.streamlit.io/deployment-tutorial"
+
+export const SNOWFLAKE_LEARN_MORE_URL = "https://share.streamlit.io/sis-about"
+
+export const SNOWFLAKE_TRIAL_URL = "https://share.streamlit.io/snowflake-trial"

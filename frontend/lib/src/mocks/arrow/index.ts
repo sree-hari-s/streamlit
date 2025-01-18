@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 import { CATEGORICAL } from "./types/categorical"
 import { CATEGORICAL_COLUMN } from "./types/categoricalColumn"
 import { CATEGORICAL_INTERVAL } from "./types/categoricalInterval"
-import { DATETIME } from "./types/datetime"
+import { DATE, DATETIME, DATETIMETZ } from "./types/datetime"
 import { DECIMAL } from "./types/decimal"
 import { DICTIONARY } from "./types/dictionary"
 import { FLOAT64 } from "./types/float64"
@@ -33,20 +33,23 @@ import { UNICODE } from "./types/unicode"
 import { EMPTY } from "./empty"
 import { MULTI } from "./multi"
 import { NAMED_INDEX } from "./namedIndex"
-import { STYLER, DISPLAY_VALUES } from "./styler"
+import { DISPLAY_VALUES, STYLER } from "./styler"
 import { FEWER_COLUMNS } from "./fewerColumns"
 import { DIFFERENT_COLUMN_TYPES } from "./differentColumnTypes"
 import { VEGA_LITE } from "./vegaLite"
 import { TEN_BY_TEN } from "./tenByTen"
 import { TALL, VERY_TALL } from "./tall"
 import { SMALL, WIDE } from "./wide"
+import { TIMEDELTA } from "./types/timedelta"
 
 export {
   // Types
   CATEGORICAL,
   CATEGORICAL_COLUMN,
   CATEGORICAL_INTERVAL,
+  DATE,
   DATETIME,
+  DATETIMETZ,
   DECIMAL,
   DICTIONARY,
   FLOAT64,
@@ -59,6 +62,7 @@ export {
   RANGE,
   UINT64,
   UNICODE,
+  TIMEDELTA,
   // Special cases
   EMPTY,
   MULTI,

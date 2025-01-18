@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import json
+import mimetypes
 import os
 import tempfile
 from unittest.mock import MagicMock
@@ -24,14 +27,18 @@ import tornado.websocket
 
 from streamlit.runtime.forward_msg_cache import ForwardMsgCache, populate_hash_if_needed
 from streamlit.runtime.runtime_util import serialize_forward_msg
-from streamlit.web.server.routes import ALLOWED_MESSAGE_ORIGINS
+from streamlit.web.server import Server
+from streamlit.web.server.routes import _DEFAULT_ALLOWED_MESSAGE_ORIGINS
 from streamlit.web.server.server import (
-    ALLOWED_MESSAGE_ORIGIN_ENDPOINT,
     HEALTH_ENDPOINT,
+    HOST_CONFIG_ENDPOINT,
     MESSAGE_ENDPOINT,
-    AllowedMessageOriginsHandler,
+    NEW_HEALTH_ENDPOINT,
+    AddSlashHandler,
     HealthHandler,
+    HostConfigHandler,
     MessageCacheHandler,
+    RemoveSlashHandler,
     StaticFileHandler,
 )
 from tests.streamlit.message_mocks import create_dataframe_msg
@@ -42,7 +49,7 @@ class HealthHandlerTest(tornado.testing.AsyncHTTPTestCase):
     """Tests the /_stcore/health endpoint"""
 
     def setUp(self):
-        super(HealthHandlerTest, self).setUp()
+        super().setUp()
         self._is_healthy = True
 
     async def is_healthy(self):
@@ -60,6 +67,14 @@ class HealthHandlerTest(tornado.testing.AsyncHTTPTestCase):
 
         self._is_healthy = False
         response = self.fetch("/_stcore/health")
+        self.assertEqual(503, response.code)
+
+    def test_health_head(self):
+        response = self.fetch("/_stcore/health", method="HEAD")
+        self.assertEqual(200, response.code)
+
+        self._is_healthy = False
+        response = self.fetch("/_stcore/health", method="HEAD")
         self.assertEqual(503, response.code)
 
     @patch_config_options({"server.enableXsrfProtection": False})
@@ -117,17 +132,27 @@ class StaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self._tmpfile = tempfile.NamedTemporaryFile(dir=self._tmpdir.name, delete=False)
+        self._tmp_js_file = tempfile.NamedTemporaryFile(
+            dir=self._tmpdir.name, suffix="script.js", delete=False
+        )
+        self._tmp_html_file = tempfile.NamedTemporaryFile(
+            dir=self._tmpdir.name, suffix="file.html", delete=False
+        )
+        self._tmp_css_file = tempfile.NamedTemporaryFile(
+            dir=self._tmpdir.name, suffix="stylesheet.css", delete=False
+        )
         self._filename = os.path.basename(self._tmpfile.name)
+        self._js_filename = os.path.basename(self._tmp_js_file.name)
+        self._html_filename = os.path.basename(self._tmp_html_file.name)
+        self._css_filename = os.path.basename(self._tmp_css_file.name)
 
         super().setUp()
 
     def tearDown(self) -> None:
         super().tearDown()
 
+        self._tmpfile.close()
         self._tmpdir.cleanup()
-
-    def get_pages(self):
-        return {"page1": "page_info1", "page2": "page_info2"}
 
     def get_app(self):
         return tornado.web.Application(
@@ -138,7 +163,10 @@ class StaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
                     {
                         "path": self._tmpdir.name,
                         "default_filename": self._filename,
-                        "get_pages": self.get_pages,
+                        "reserved_paths": [
+                            NEW_HEALTH_ENDPOINT,
+                            HOST_CONFIG_ENDPOINT,
+                        ],
                     },
                 )
             ]
@@ -157,7 +185,7 @@ class StaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
         for r in responses:
             assert r.code == 200
 
-    def test_parse_url_path_404(self):
+    def test_nonexistent_urls_return_default_page(self):
         responses = [
             self.fetch("/nonexistent"),
             self.fetch("/page2/nonexistent"),
@@ -165,47 +193,131 @@ class StaticFileHandlerTest(tornado.testing.AsyncHTTPTestCase):
         ]
 
         for r in responses:
+            assert r.code == 200
+
+    def test_reserved_paths_serve_404(self):
+        responses = [
+            self.fetch("/nonexistent/_stcore/health"),
+            self.fetch("/page2/_stcore/host-config"),
+        ]
+
+        for r in responses:
+            assert r.code == 404
+
+    def test_mimetype_is_overridden_by_server(self):
+        """Test get_content_type function."""
+        mimetypes.add_type("custom/html", ".html")
+        mimetypes.add_type("custom/js", ".js")
+        mimetypes.add_type("custom/css", ".css")
+
+        r = self.fetch(f"/{self._html_filename}")
+        assert r.headers["Content-Type"] == "custom/html"
+
+        r = self.fetch(f"/{self._js_filename}")
+        assert r.headers["Content-Type"] == "custom/js"
+
+        r = self.fetch(f"/{self._css_filename}")
+        assert r.headers["Content-Type"] == "custom/css"
+
+        Server.initialize_mimetypes()
+
+        r = self.fetch(f"/{self._html_filename}")
+        assert r.headers["Content-Type"] == "text/html"
+
+        r = self.fetch(f"/{self._js_filename}")
+        assert r.headers["Content-Type"] == "application/javascript"
+
+        r = self.fetch(f"/{self._css_filename}")
+        assert r.headers["Content-Type"] == "text/css"
+
+
+class RemoveSlashHandlerTest(tornado.testing.AsyncHTTPTestCase):
+    def get_app(self):
+        return tornado.web.Application(
+            [
+                (
+                    r"^/(?!/)(.*)",
+                    RemoveSlashHandler,
+                )
+            ]
+        )
+
+    def test_parse_url_path_301(self):
+        paths = ["/page1/", "/page2/page3/"]
+        responses = [self.fetch(path, follow_redirects=False) for path in paths]
+
+        for idx, r in enumerate(responses):
+            assert r.code == 301
+            assert r.headers["Location"] == paths[idx].rstrip("/")
+
+    def test_parse_url_path_404(self):
+        paths = ["//page1/", "//page2/page3/"]
+        responses = [self.fetch(path, follow_redirects=False) for path in paths]
+
+        for r in responses:
             assert r.code == 404
 
 
-class AllowedMessageOriginsHandlerTest(tornado.testing.AsyncHTTPTestCase):
+class AddSlashHandlerTest(tornado.testing.AsyncHTTPTestCase):
+    def get_app(self):
+        return tornado.web.Application(
+            [
+                (
+                    r"/(.*)",
+                    AddSlashHandler,
+                )
+            ]
+        )
+
+    def test_parse_url_path_301(self):
+        paths = ["/page1"]
+        responses = [self.fetch(path, follow_redirects=False) for path in paths]
+
+        for idx, r in enumerate(responses):
+            assert r.code == 301
+            assert r.headers["Location"] == paths[idx] + "/"
+
+
+class HostConfigHandlerTest(tornado.testing.AsyncHTTPTestCase):
     def setUp(self):
-        super(AllowedMessageOriginsHandlerTest, self).setUp()
+        super().setUp()
 
     def get_app(self):
         return tornado.web.Application(
             [
                 (
-                    rf"/{ALLOWED_MESSAGE_ORIGIN_ENDPOINT}",
-                    AllowedMessageOriginsHandler,
+                    rf"/{HOST_CONFIG_ENDPOINT}",
+                    HostConfigHandler,
                 )
             ]
         )
 
     @patch_config_options({"global.developmentMode": False})
     def test_allowed_message_origins(self):
-        response = self.fetch("/_stcore/allowed-message-origins")
+        response = self.fetch("/_stcore/host-config")
         response_body = json.loads(response.body)
         self.assertEqual(200, response.code)
         self.assertEqual(
-            {"allowedOrigins": ALLOWED_MESSAGE_ORIGINS, "useExternalAuthToken": False},
+            {
+                "allowedOrigins": _DEFAULT_ALLOWED_MESSAGE_ORIGINS,
+                "useExternalAuthToken": False,
+                # Default host configuration settings:
+                "enableCustomParentMessages": False,
+                "enforceDownloadInNewTab": False,
+                "metricsUrl": "",
+            },
             response_body,
         )
         # Check that localhost NOT appended/allowed outside dev mode
-        local_host_appended = "http://localhost" in response_body["allowedOrigins"]
-        self.assertEqual(
-            local_host_appended,
-            False,
+        self.assertNotIn(
+            "http://localhost",
+            response_body["allowedOrigins"],
         )
 
     @patch_config_options({"global.developmentMode": True})
     def test_allowed_message_origins_dev_mode(self):
-        response = self.fetch("/_stcore/allowed-message-origins")
+        response = self.fetch("/_stcore/host-config")
         self.assertEqual(200, response.code)
         # Check that localhost has been appended/allowed in dev mode
         origins_list = json.loads(response.body)["allowedOrigins"]
-        local_host_appended = "http://localhost" in origins_list
-        self.assertEqual(
-            local_host_appended,
-            True,
-        )
+        self.assertIn("http://localhost", origins_list)

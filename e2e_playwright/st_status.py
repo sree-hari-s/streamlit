@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,18 @@
 # limitations under the License.
 
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+ctx = get_script_run_ctx()
+if ctx is None:
+    import sys
+
+    # This script is not compatible with running it in "bare" mode (e.g. `python script.py`)
+    # The reason is that the mutable container is not correctly returned if
+    # the runtime doesn't exist.
+    print("This test script does not support bare script execution.")
+    sys.exit(0)
+
 
 running_status = st.status("Running status", expanded=True)
 running_status.write("Doing some work...")

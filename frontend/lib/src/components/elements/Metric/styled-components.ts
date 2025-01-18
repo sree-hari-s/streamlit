@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,24 @@
  */
 
 import styled from "@emotion/styled"
+
 import { StyledWidgetLabel } from "@streamlit/lib/src/components/widgets/BaseWidget/styled-components"
+import { Metric as MetricProto } from "@streamlit/lib/src/proto"
 import { LabelVisibilityOptions } from "@streamlit/lib/src/util/utils"
 
+export interface StyledMetricContainerProps {
+  showBorder: boolean
+}
+
+export const StyledMetricContainer = styled.div<StyledMetricContainerProps>(
+  ({ theme, showBorder }) => ({
+    ...(showBorder && {
+      border: `${theme.sizes.borderWidth} solid ${theme.colors.borderColor}`,
+      borderRadius: theme.radii.default,
+      padding: `calc(${theme.spacing.lg} - ${theme.sizes.borderWidth})`,
+    }),
+  })
+)
 export interface StyledMetricLabelTextProps {
   visibility?: LabelVisibilityOptions
 }
@@ -29,7 +44,7 @@ export const StyledTruncateText = styled.div(({ theme }) => ({
   overflow: "hidden",
   whiteSpace: "nowrap",
   fontFamily: theme.genericFonts.bodyFont,
-  lineHeight: theme.lineHeights.normal,
+  lineHeight: "normal",
   verticalAlign: "middle",
 
   // Styles to truncate the text inside the StyledStreamlitMarkdown div.
@@ -56,14 +71,36 @@ export const StyledMetricLabelText = styled(
 
 export const StyledMetricValueText = styled.div(({ theme }) => ({
   fontSize: theme.fontSizes.threeXL,
-  color: theme.colors.textColor,
+  color: theme.colors.bodyText,
   paddingBottom: theme.spacing.twoXS,
 }))
 
-export const StyledMetricDeltaText = styled.div(({ theme }) => ({
-  fontSize: theme.fontSizes.md,
-  display: "flex",
-  flexDirection: "row",
-  alignItems: "center",
-  fontWeight: theme.fontWeights.normal,
-}))
+export interface StyledMetricDeltaTextProps {
+  metricColor: MetricProto.MetricColor
+}
+
+const getMetricColor = (
+  theme: any,
+  color: MetricProto.MetricColor
+): string => {
+  switch (color) {
+    case MetricProto.MetricColor.RED:
+      return theme.colors.metricNegativeDeltaColor
+    case MetricProto.MetricColor.GREEN:
+      return theme.colors.metricPositiveDeltaColor
+    // this must be grey
+    default:
+      return theme.colors.metricNeutralDeltaColor
+  }
+}
+
+export const StyledMetricDeltaText = styled.div<StyledMetricDeltaTextProps>(
+  ({ theme, metricColor }) => ({
+    color: getMetricColor(theme, metricColor),
+    fontSize: theme.fontSizes.md,
+    display: "flex",
+    flexDirection: "row",
+    alignItems: "center",
+    fontWeight: theme.fontWeights.normal,
+  })
+)

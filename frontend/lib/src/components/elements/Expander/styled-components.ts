@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,31 +16,87 @@
 
 import styled from "@emotion/styled"
 
-export const StyledIconContainer = styled.div(({ theme }) => ({
-  display: "flex",
-  gap: theme.spacing.sm,
-  alignItems: "center",
-}))
+import {
+  STALE_STYLES,
+  STALE_TRANSITION_PARAMS,
+} from "@streamlit/lib/src/theme"
 
 export interface StyledExpandableContainerProps {
   empty: boolean
   disabled: boolean
 }
 
-export const StyledExpandableContainer =
-  styled.div<StyledExpandableContainerProps>(({ theme, empty, disabled }) => {
-    if (empty) {
-      // Don't apply hover styling if empty:
-      return {
-        ".streamlit-expanderHeader:hover": {
-          color: disabled ? theme.colors.disabled : theme.colors.bodyText,
-        },
-      }
-    }
+export const StyledExpandableContainer = styled.div({})
+interface StyledDetailsProps {
+  isStale: boolean
+}
 
-    return {
-      ".streamlit-expanderHeader:hover svg": {
-        fill: theme.colors.primary,
-      },
-    }
+export const BORDER_SIZE = 1 // px
+export const StyledDetails = styled.details<StyledDetailsProps>(
+  ({ isStale, theme }) => ({
+    marginBottom: 0,
+    marginTop: 0,
+    width: "100%",
+    borderStyle: "solid",
+    borderWidth: theme.sizes.borderWidth,
+    borderColor: theme.colors.borderColor,
+    borderRadius: theme.radii.default,
+    ...(isStale
+      ? {
+          borderColor: theme.colors.borderColorLight,
+          transition: `border ${STALE_TRANSITION_PARAMS}`,
+        }
+      : {}),
   })
+)
+
+export const StyledSummaryHeading = styled.span(({ theme }) => ({
+  display: "flex",
+  gap: theme.spacing.sm,
+  alignItems: "center",
+  flexGrow: 1,
+}))
+
+interface StyledSummaryProps {
+  empty: boolean
+  isStale: boolean
+}
+
+export const StyledSummary = styled.summary<StyledSummaryProps>(
+  ({ theme, empty, isStale }) => ({
+    position: "relative",
+    display: "flex",
+    width: "100%",
+    "&:focus-visible": {
+      outline: `${theme.sizes.borderWidth} solid ${theme.colors.primary}`,
+      outlineOffset: `-${theme.sizes.borderWidth}`,
+      borderRadius: theme.radii.default,
+    },
+    fontSize: theme.fontSizes.sm,
+    paddingLeft: theme.spacing.lg,
+    paddingRight: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
+    cursor: "pointer",
+    listStyleType: "none",
+    "&::-webkit-details-marker": {
+      display: "none",
+    },
+    "&:hover": {
+      color: empty ? undefined : theme.colors.primary,
+    },
+    "&:hover svg": {
+      fill: empty ? undefined : theme.colors.primary,
+    },
+    ...(empty && {
+      cursor: "default",
+    }),
+    ...(isStale && STALE_STYLES),
+  })
+)
+
+export const StyledDetailsPanel = styled.div(({ theme }) => ({
+  paddingBottom: theme.spacing.lg,
+  paddingLeft: theme.spacing.lg,
+  paddingRight: theme.spacing.lg,
+}))

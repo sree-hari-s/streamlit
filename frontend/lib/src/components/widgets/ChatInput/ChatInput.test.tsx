@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,41 +15,46 @@
  */
 
 import React from "react"
-import "@testing-library/jest-dom"
-import { screen, fireEvent } from "@testing-library/react"
+
+import { fireEvent, screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
 import { render } from "@streamlit/lib/src/test_util"
 import { ChatInput as ChatInputProto } from "@streamlit/lib/src/proto"
 import { WidgetStateManager } from "@streamlit/lib/src/WidgetStateManager"
 
 import ChatInput, { Props } from "./ChatInput"
 
-const getProps = (elementProps: Partial<ChatInputProto> = {}): Props => ({
+const getProps = (
+  elementProps: Partial<ChatInputProto> = {},
+  widgetProps: Partial<Props> = {}
+): Props => ({
   element: ChatInputProto.create({
     id: "123",
     placeholder: "Enter Text Here",
     disabled: false,
     default: "",
-    position: ChatInputProto.Position.BOTTOM,
     ...elementProps,
   }),
   width: 300,
   disabled: false,
   widgetMgr: new WidgetStateManager({
-    sendRerunBackMsg: jest.fn(),
-    formsDataChanged: jest.fn(),
+    sendRerunBackMsg: vi.fn(),
+    formsDataChanged: vi.fn(),
   }),
+  ...widgetProps,
 })
 
 describe("ChatInput widget", () => {
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
   })
 
   it("renders without crashing", () => {
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toBeInTheDocument()
   })
 
@@ -57,7 +62,7 @@ describe("ChatInput widget", () => {
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toHaveAttribute("placeholder", props.element.placeholder)
   })
 
@@ -65,7 +70,7 @@ describe("ChatInput widget", () => {
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toHaveAttribute("aria-label", props.element.placeholder)
   })
 
@@ -73,93 +78,143 @@ describe("ChatInput widget", () => {
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toHaveTextContent(props.element.default)
   })
 
-  it("sets the value when values are typed in", () => {
+  it("sets the value when values are typed in", async () => {
+    const user = userEvent.setup()
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.change(chatInput, { target: { value: "Sample text" } })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "Sample text")
     expect(chatInput).toHaveTextContent("Sample text")
   })
 
-  it("does not increase text value when maxChars is set", () => {
+  it("does not increase text value when maxChars is set", async () => {
+    const user = userEvent.setup()
     const props = getProps({ maxChars: 10 })
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.change(chatInput, { target: { value: "1234567890" } })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "1234567890")
     expect(chatInput).toHaveTextContent("1234567890")
-    fireEvent.change(chatInput, { target: { value: "12345678901" } })
+    await user.type(chatInput, "1")
     expect(chatInput).toHaveTextContent("1234567890")
   })
 
-  it("sends and resets the value on enter", () => {
+  it("sends and resets the value on enter", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    const spy = jest.spyOn(props.widgetMgr, "setStringTriggerValue")
+    const spy = vi.spyOn(props.widgetMgr, "setStringTriggerValue")
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.change(chatInput, { target: { value: "1234567890" } })
-    expect(chatInput).toHaveTextContent("1234567890")
-    fireEvent.keyDown(chatInput, { key: "Enter" })
-    expect(spy).toHaveBeenCalledWith(props.element, "1234567890", {
-      fromUi: true,
-    })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "1234567890{enter}")
+    expect(spy).toHaveBeenCalledWith(
+      props.element,
+      "1234567890",
+      {
+        fromUi: true,
+      },
+      undefined
+    )
     expect(chatInput).toHaveTextContent("")
   })
 
-  it("will not send an empty value on enter if empty", () => {
+  it("ensures chat input has focus on submit by keyboard", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    const spy = jest.spyOn(props.widgetMgr, "setStringTriggerValue")
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.keyDown(chatInput, { key: "Enter" })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "1234567890{enter}")
+    expect(chatInput).toHaveFocus()
+  })
+
+  it("ensures chat input has focus on submit by button click", async () => {
+    const user = userEvent.setup()
+    const props = getProps()
+    render(<ChatInput {...props} />)
+
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    const chatButton = screen.getByTestId("stChatInputSubmitButton")
+    await user.type(chatInput, "1234567890")
+    await user.click(chatButton)
+    expect(chatInput).toHaveFocus()
+  })
+
+  it("can set fragmentId when sending value", async () => {
+    const user = userEvent.setup()
+    const props = getProps(undefined, { fragmentId: "myFragmentId" })
+    const spy = vi.spyOn(props.widgetMgr, "setStringTriggerValue")
+    render(<ChatInput {...props} />)
+
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "1234567890{enter}")
+    expect(spy).toHaveBeenCalledWith(
+      props.element,
+      "1234567890",
+      {
+        fromUi: true,
+      },
+      "myFragmentId"
+    )
+  })
+
+  it("will not send an empty value on enter if empty", async () => {
+    const user = userEvent.setup()
+    const props = getProps()
+    const spy = vi.spyOn(props.widgetMgr, "setStringTriggerValue")
+    render(<ChatInput {...props} />)
+
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "{enter}")
     expect(spy).not.toHaveBeenCalledWith(props.element, "", {
       fromUi: true,
     })
     expect(chatInput).toHaveTextContent("")
   })
 
-  it("will not show instructions when the text has changed", () => {
+  it("will not show instructions when the text has changed", async () => {
+    const user = userEvent.setup()
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     const instructions = screen.getByTestId("InputInstructions")
     expect(instructions).toHaveTextContent("")
 
-    fireEvent.change(chatInput, { target: { value: "1234567890" } })
+    await user.type(chatInput, "1234567890")
     expect(instructions).toHaveTextContent("")
   })
 
-  it("does not send/clear on shift + enter", () => {
+  it("does not send/clear on shift + enter", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    const spy = jest.spyOn(props.widgetMgr, "setStringTriggerValue")
+    const spy = vi.spyOn(props.widgetMgr, "setStringTriggerValue")
     render(<ChatInput {...props} />)
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
 
-    fireEvent.change(chatInput, { target: { value: "1234567890" } })
+    await user.type(chatInput, "1234567890")
     expect(chatInput).toHaveTextContent("1234567890")
-    fireEvent.keyDown(chatInput, { key: "Enter", shiftKey: true })
-    // We cannot test the value to be changed cause that is essentially a
-    // change event.
+    await user.type(chatInput, "{shift>}{enter}{/shift}")
     expect(chatInput).not.toHaveTextContent("")
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it("does not send/clear on ctrl + enter", () => {
+  it("does not send/clear on ctrl + enter", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    const spy = jest.spyOn(props.widgetMgr, "setStringTriggerValue")
+    const spy = vi.spyOn(props.widgetMgr, "setStringTriggerValue")
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.change(chatInput, { target: { value: "1234567890" } })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "1234567890")
     expect(chatInput).toHaveTextContent("1234567890")
+    // TODO: Utilize user-event instead of fireEvent
+    // eslint-disable-next-line testing-library/prefer-user-event
     fireEvent.keyDown(chatInput, { key: "Enter", ctrlKey: true })
     // We cannot test the value to be changed cause that is essentially a
     // change event.
@@ -167,17 +222,16 @@ describe("ChatInput widget", () => {
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it("does not send/clear on meta + enter", () => {
+  it("does not send/clear on meta + enter", async () => {
+    const user = userEvent.setup()
     const props = getProps()
-    const spy = jest.spyOn(props.widgetMgr, "setStringTriggerValue")
+    const spy = vi.spyOn(props.widgetMgr, "setStringTriggerValue")
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.change(chatInput, { target: { value: "1234567890" } })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "1234567890")
     expect(chatInput).toHaveTextContent("1234567890")
-    fireEvent.keyDown(chatInput, { key: "Enter", metaKey: true })
-    // We cannot test the value to be changed cause that is essentially a
-    // change event.
+    await user.type(chatInput, "{meta>}{enter}{/meta}")
     expect(chatInput).not.toHaveTextContent("")
     expect(spy).not.toHaveBeenCalled()
   })
@@ -186,7 +240,7 @@ describe("ChatInput widget", () => {
     const props = getProps({ value: "12345", setValue: true })
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toHaveTextContent("12345")
   })
 
@@ -194,7 +248,7 @@ describe("ChatInput widget", () => {
     const props = getProps({ value: "12345", setValue: false })
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toHaveTextContent("")
   })
 
@@ -202,7 +256,7 @@ describe("ChatInput widget", () => {
     const props = getProps({ disabled: true })
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).toBeDisabled()
 
     const button = screen.getByRole("button")
@@ -213,7 +267,7 @@ describe("ChatInput widget", () => {
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
+    const chatInput = screen.getByTestId("stChatInputTextArea")
     expect(chatInput).not.toBeDisabled()
 
     const button = screen.getByRole("button")
@@ -228,17 +282,19 @@ describe("ChatInput widget", () => {
     expect(button).toBeDisabled()
   })
 
-  it("enables the send button when text is set, disables it when removed", () => {
+  it("enables the send button when text is set, disables it when removed", async () => {
+    const user = userEvent.setup()
     const props = getProps()
     render(<ChatInput {...props} />)
 
-    const chatInput = screen.getByTestId("stChatInput")
-    fireEvent.change(chatInput, { target: { value: "Sample text" } })
+    const chatInput = screen.getByTestId("stChatInputTextArea")
+    await user.type(chatInput, "Sample text")
 
     const button = screen.getByRole("button")
     expect(button).not.toBeDisabled()
 
-    fireEvent.change(chatInput, { target: { value: "" } })
+    await user.clear(chatInput)
+    // await user.type(chatInput, "")
     expect(button).toBeDisabled()
   })
 })

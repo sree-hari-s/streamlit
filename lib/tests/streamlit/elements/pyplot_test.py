@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,8 +14,9 @@
 
 """st.pyplot unit tests."""
 
-from typing import Optional
-from unittest.mock import patch
+from __future__ import annotations
+
+from unittest.mock import Mock, patch
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ import numpy as np
 from parameterized import parameterized
 
 import streamlit as st
-from streamlit.elements import image
+from streamlit.elements.lib.image_utils import WidthBehavior
 from streamlit.web.server.server import MEDIA_ENDPOINT
 from tests.delta_generator_test_case import DeltaGeneratorTestCase
 
@@ -43,8 +44,8 @@ class PyplotTest(DeltaGeneratorTestCase):
         """Test st.pyplot.
 
         Need to test:
-        * Failed import of matplotlib.
-        * Passing in a figure.
+        - Failed import of matplotlib.
+        - Passing in a figure.
         """
 
         # Make this deterministic
@@ -64,7 +65,7 @@ class PyplotTest(DeltaGeneratorTestCase):
         self.assertTrue(el.imgs.imgs[0].url.startswith(MEDIA_ENDPOINT))
 
     @parameterized.expand([("true", True), ("false", False), ("none", None)])
-    def test_st_pyplot_clear_global_figure(self, _, clear_figure: Optional[bool]):
+    def test_st_pyplot_clear_global_figure(self, _, clear_figure: bool | None):
         """st.pyplot should clear the global figure if `clear_figure` is
         True *or* None.
         """
@@ -77,8 +78,16 @@ class PyplotTest(DeltaGeneratorTestCase):
             else:
                 plt_clf.assert_not_called()
 
+    @patch("streamlit.elements.pyplot.show_deprecation_warning")
+    def test_global_object_deprecation_warning(self, show_warning_mock: Mock):
+        """We show deprecation warnings when st.pyplot is called without a figure object."""
+        plt.hist(np.random.normal(1, 1, size=100), bins=20)
+        st.pyplot()
+
+        show_warning_mock.assert_called_once()
+
     @parameterized.expand([("true", True), ("false", False), ("none", None)])
-    def test_st_pyplot_clear_figure(self, _, clear_figure: Optional[bool]):
+    def test_st_pyplot_clear_figure(self, _, clear_figure: bool | None):
         """st.pyplot should clear the passed-in figure if `clear_figure` is True."""
         fig = plt.figure()
         ax1 = fig.add_subplot(111)
@@ -92,7 +101,7 @@ class PyplotTest(DeltaGeneratorTestCase):
                 fig_clf.assert_not_called()
 
     @parameterized.expand(
-        [(True, image.WidthBehaviour.COLUMN), (False, image.WidthBehaviour.ORIGINAL)]
+        [(True, WidthBehavior.COLUMN), (False, WidthBehavior.ORIGINAL)]
     )
     def test_st_pyplot_use_container_width(
         self, use_container_width: bool, image_width: int

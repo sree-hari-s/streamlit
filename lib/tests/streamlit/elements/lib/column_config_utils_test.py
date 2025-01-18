@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,18 +16,21 @@ from __future__ import annotations
 import datetime
 import unittest
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 from parameterized import parameterized
 
+from streamlit.dataframe_util import DataFormat
 from streamlit.elements.lib.column_config_utils import (
     _EDITING_COMPATIBILITY_MAPPING,
     INDEX_IDENTIFIER,
     ColumnConfigMapping,
     ColumnConfigMappingInput,
     ColumnDataKind,
+    _convert_column_config_to_json,
     _determine_data_kind,
     _determine_data_kind_via_arrow,
     _determine_data_kind_via_inferred_type,
@@ -38,12 +41,13 @@ from streamlit.elements.lib.column_config_utils import (
     process_config_mapping,
     update_column_config,
 )
-from streamlit.elements.lib.column_types import ColumnConfig
 from streamlit.errors import StreamlitAPIException
-from streamlit.type_util import DataFormat
+
+if TYPE_CHECKING:
+    from streamlit.elements.lib.column_types import ColumnConfig
 
 
-class TestObject(object):
+class TestObject:
     def __str__(self):
         return "TestObject"
 
@@ -361,6 +365,27 @@ class ColumnConfigUtilsTest(unittest.TestCase):
                 f"Expected list to be compatible with {data_kind}",
             )
 
+    def test_process_config_mapping_is_clone(self):
+        """Test that the process_config_mapping function clones the config object."""
+        config_1: ColumnConfigMappingInput = {
+            "index": {"label": "Index", "width": "medium"},
+            "col1": {
+                "label": "Column 1",
+                "width": "small",
+                "required": True,
+                "type_config": {"type": "link"},
+            },
+        }
+
+        processed_config = process_config_mapping(config_1)
+        processed_config["col1"]["label"] = "Changed label"
+
+        self.assertNotEqual(
+            processed_config["col1"]["label"],
+            config_1["col1"]["label"],
+            "The labels should be different.",
+        )
+
     def test_process_config_mapping(self):
         """Test that the process_config_mapping function correctly processes a config mapping."""
         config_1: ColumnConfigMappingInput = {
@@ -455,23 +480,36 @@ class ColumnConfigUtilsTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            (DataFormat.SET_OF_VALUES, True),
-            (DataFormat.TUPLE_OF_VALUES, True),
+            (DataFormat.COLUMN_VALUE_MAPPING, True),
+            (DataFormat.LIST_OF_RECORDS, True),
+            (DataFormat.LIST_OF_ROWS, True),
             (DataFormat.LIST_OF_VALUES, True),
             (DataFormat.NUMPY_LIST, True),
             (DataFormat.NUMPY_MATRIX, True),
-            (DataFormat.LIST_OF_RECORDS, True),
-            (DataFormat.LIST_OF_ROWS, True),
-            (DataFormat.COLUMN_VALUE_MAPPING, True),
+            (DataFormat.PANDAS_ARRAY, True),
+            (DataFormat.PANDAS_INDEX, True),
+            (DataFormat.POLARS_DATAFRAME, True),
+            (DataFormat.POLARS_LAZYFRAME, True),
+            (DataFormat.POLARS_SERIES, True),
+            (DataFormat.PYARROW_ARRAY, True),
+            (DataFormat.RAY_DATASET, True),
+            (DataFormat.SET_OF_VALUES, True),
+            (DataFormat.TUPLE_OF_VALUES, True),
             # Some data formats which should not hide the index:
-            (DataFormat.PANDAS_DATAFRAME, False),
-            (DataFormat.PANDAS_SERIES, False),
-            (DataFormat.PANDAS_INDEX, False),
-            (DataFormat.KEY_VALUE_DICT, False),
-            (DataFormat.PYARROW_TABLE, False),
-            (DataFormat.PANDAS_STYLER, False),
             (DataFormat.COLUMN_INDEX_MAPPING, False),
             (DataFormat.COLUMN_SERIES_MAPPING, False),
+            (DataFormat.DASK_OBJECT, False),
+            (DataFormat.KEY_VALUE_DICT, False),
+            (DataFormat.MODIN_OBJECT, False),
+            (DataFormat.PANDAS_DATAFRAME, False),
+            (DataFormat.PANDAS_SERIES, False),
+            (DataFormat.PANDAS_STYLER, False),
+            (DataFormat.PYARROW_TABLE, False),
+            (DataFormat.PYSPARK_OBJECT, False),
+            (DataFormat.SNOWPANDAS_OBJECT, False),
+            (DataFormat.SNOWPARK_OBJECT, False),
+            (DataFormat.XARRAY_DATA_ARRAY, False),
+            (DataFormat.XARRAY_DATASET, False),
         ]
     )
     def test_apply_data_specific_configs_hides_index(
@@ -479,8 +517,7 @@ class ColumnConfigUtilsTest(unittest.TestCase):
     ):
         """Test that the index is hidden for some data formats."""
         columns_config: ColumnConfigMapping = {}
-        data_df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
-        apply_data_specific_configs(columns_config, data_df, data_format)
+        apply_data_specific_configs(columns_config, data_format)
 
         if hidden:
             self.assertEqual(
@@ -491,64 +528,16 @@ class ColumnConfigUtilsTest(unittest.TestCase):
         else:
             self.assertNotIn(INDEX_IDENTIFIER, columns_config)
 
-    @parameterized.expand(
-        [
-            (DataFormat.SET_OF_VALUES, True),
-            (DataFormat.TUPLE_OF_VALUES, True),
-            (DataFormat.LIST_OF_VALUES, True),
-            (DataFormat.NUMPY_LIST, True),
-            (DataFormat.KEY_VALUE_DICT, True),
-            # Most other data formats which should not rename the first column:
-            (DataFormat.PANDAS_DATAFRAME, False),
-            (DataFormat.PANDAS_SERIES, False),
-            (DataFormat.PANDAS_INDEX, False),
-            (DataFormat.PYARROW_TABLE, False),
-            (DataFormat.PANDAS_STYLER, False),
-            (DataFormat.COLUMN_INDEX_MAPPING, False),
-            (DataFormat.COLUMN_SERIES_MAPPING, False),
-            (DataFormat.LIST_OF_RECORDS, False),
-            (DataFormat.LIST_OF_ROWS, False),
-            (DataFormat.COLUMN_VALUE_MAPPING, False),
-        ]
-    )
-    def test_apply_data_specific_configs_renames_column(
-        self, data_format: DataFormat, renames: bool
-    ):
-        """Test that the column names are changed for some data formats."""
-        data_df = pd.DataFrame([1, 2, 3])
-        apply_data_specific_configs({}, data_df, data_format)
-        if renames:
-            self.assertEqual(
-                data_df.columns[0],
-                "value",
-                f"Data of type {data_format} should be renamed to 'value'",
-            )
-        else:
-            self.assertEqual(
-                data_df.columns[0],
-                0,
-                f"Data of type {data_format} should not be renamed.",
-            )
+    def test_nan_as_value_raises_exception(self):
+        """Test that the usage of `nan` as value in column config raises an exception."""
 
-    def test_apply_data_specific_configs_disables_columns(self):
-        """Test that Arrow incompatible columns are disabled (configured as non-editable)."""
-        columns_config: ColumnConfigMapping = {}
-        data_df = pd.DataFrame(
-            {
-                "a": pd.Series([1, 2]),
-                "b": pd.Series(["foo", "bar"]),
-                "c": pd.Series([1, "foo"]),  # Incompatible
-                "d": pd.Series([1 + 2j, 3 + 4j]),  # Incompatible
-            }
-        )
-
-        apply_data_specific_configs(
-            columns_config,
-            data_df,
-            DataFormat.PANDAS_DATAFRAME,
-            check_arrow_compatibility=True,
-        )
-        self.assertNotIn("a", columns_config)
-        self.assertNotIn("b", columns_config)
-        self.assertTrue(columns_config["c"]["disabled"])
-        self.assertTrue(columns_config["d"]["disabled"])
+        with self.assertRaises(StreamlitAPIException):
+            _convert_column_config_to_json(
+                {
+                    "label": "Col1",
+                    "type_config": {
+                        "type": "selectbox",
+                        "options": ["a", "b", "c", np.nan],
+                    },
+                },
+            )

@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,12 +57,12 @@ class ColorPickerTest(DeltaGeneratorTestCase):
 
     def test_invalid_value_type_error(self):
         """Tests that when the value type is invalid, an exception is generated"""
-        with pytest.raises(StreamlitAPIException) as exc_message:
+        with pytest.raises(StreamlitAPIException):
             st.color_picker("the label", 1234567)
 
     def test_invalid_string(self):
         """Tests that when the string doesn't match regex, an exception is generated"""
-        with pytest.raises(StreamlitAPIException) as exc_message:
+        with pytest.raises(StreamlitAPIException):
             st.color_picker("the label", "#invalid-string")
 
     def test_outside_form(self):
@@ -110,3 +110,12 @@ class ColorPickerTest(DeltaGeneratorTestCase):
             "Unsupported label_visibility option 'wrong_value'. Valid values are "
             "'visible', 'hidden' or 'collapsed'.",
         )
+
+    def test_shows_cached_widget_replay_warning(self):
+        """Test that a warning is shown when this widget is used inside a cached function."""
+        st.cache_data(lambda: st.color_picker("the label"))()
+
+        # The widget itself is still created, so we need to go back one element more:
+        el = self.get_delta_from_queue(-2).new_element.exception
+        self.assertEqual(el.type, "CachedWidgetWarning")
+        self.assertTrue(el.is_warning)

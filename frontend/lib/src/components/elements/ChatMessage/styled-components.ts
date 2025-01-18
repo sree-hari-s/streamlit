@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ export const StyledChatMessageContainer =
       gap: theme.spacing.sm,
       padding: theme.spacing.lg,
       paddingRight: background ? theme.spacing.lg : 0,
-      borderRadius: theme.radii.lg,
+      borderRadius: theme.radii.default,
       ...(background
         ? {
             backgroundColor: lightTheme
@@ -47,22 +47,32 @@ export const StyledMessageContent = styled.div(({ theme }) => ({
   color: theme.colors.bodyText,
   margin: "auto",
   flexGrow: 1,
+  // Ensure the size of the message has an interpreted width as
+  // the amount defined by flex layout and disregard its contents
+  // they will handle their overflow.
+  //
+  // Unintuitively, setting the min width to 0 tells the browser
+  // that it can shrink past the content's width to the desired size.
+  // https://makandracards.com/makandra/66994-css-flex-and-min-width
+  minWidth: 0,
 }))
 
 export const StyledAvatarBackground = styled.div(({ theme }) => {
   const lightTheme = hasLightBackgroundColor(theme)
   return {
     display: "flex",
-    border: `1px solid ${
+    border: `${theme.sizes.borderWidth} solid ${
       lightTheme ? theme.colors.gray40 : theme.colors.gray85
     }`,
     backgroundColor: lightTheme ? theme.colors.white : theme.colors.gray100,
     color: lightTheme ? theme.colors.gray90 : theme.colors.white,
-    lineHeight: "1",
+    lineHeight: theme.lineHeights.none,
     fontSize: theme.fontSizes.md,
-    width: "2rem",
-    height: "2rem",
-    borderRadius: theme.radii.lg,
+    // Ensure the avatar always respects the width/height
+    flexShrink: 0,
+    width: theme.sizes.chatAvatarSize,
+    height: theme.sizes.chatAvatarSize,
+    borderRadius: theme.radii.default,
     alignItems: "center",
     justifyContent: "center",
   }
@@ -77,9 +87,11 @@ export const StyledAvatarIcon = styled.div<StyledAvatarIconProps>(
     const lightTheme = hasLightBackgroundColor(theme)
     return {
       display: "flex",
-      width: "2rem",
-      height: "2rem",
-      borderRadius: theme.radii.lg,
+      width: theme.sizes.chatAvatarSize,
+      height: theme.sizes.chatAvatarSize,
+      // Ensure the avatar always respects the width/height
+      flexShrink: 0,
+      borderRadius: theme.radii.default,
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: background,
@@ -90,9 +102,11 @@ export const StyledAvatarIcon = styled.div<StyledAvatarIconProps>(
 
 export const StyledAvatarImage = styled.img(({ theme }) => {
   return {
-    width: "2rem",
-    height: "2rem",
-    borderRadius: theme.radii.lg,
+    width: theme.sizes.chatAvatarSize,
+    height: theme.sizes.chatAvatarSize,
+    // Ensure the avatar always respects the width/height
+    flexShrink: 0,
+    borderRadius: theme.radii.default,
     objectFit: "cover",
     display: "flex",
   }

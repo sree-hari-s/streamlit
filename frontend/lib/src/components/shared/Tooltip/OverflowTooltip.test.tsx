@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,18 +15,24 @@
  */
 
 import React from "react"
-import { shallow } from "enzyme"
+
+import { render, screen } from "@testing-library/react"
+import { userEvent } from "@testing-library/user-event"
+
+import { mockTheme } from "@streamlit/lib/src/mocks/mockTheme"
+import ThemeProvider from "@streamlit/lib/src/components/core/ThemeProvider"
 
 import OverflowTooltip from "./OverflowTooltip"
 import { Placement } from "./Tooltip"
 
 describe("Tooltip component", () => {
   afterEach(() => {
-    jest.restoreAllMocks()
+    vi.restoreAllMocks()
   })
 
-  it("should render and match snapshots when it fits onscreen", () => {
-    const useRefSpy = jest.spyOn(React, "useRef").mockReturnValue({
+  it("should render when it fits onscreen", async () => {
+    const user = userEvent.setup()
+    const useRefSpy = vi.spyOn(React, "useRef").mockReturnValue({
       current: {
         // Pretend the body is greater than its onscreen area.
         offsetWidth: 200,
@@ -34,26 +40,34 @@ describe("Tooltip component", () => {
       },
     })
 
-    jest.spyOn(React, "useEffect").mockImplementation(f => f())
+    vi.spyOn(React, "useEffect").mockImplementation(f => f())
 
-    const wrapper = shallow(
+    render(
       <OverflowTooltip
         content="the content"
         placement={Placement.AUTO}
         style={{}}
       >
         the child
-      </OverflowTooltip>
+      </OverflowTooltip>,
+      {
+        wrapper: ({ children }) => (
+          <ThemeProvider theme={mockTheme.emotion}>{children}</ThemeProvider>
+        ),
+      }
     )
 
-    expect(wrapper.props().content).toBe("")
+    const tooltip = screen.getByTestId("stTooltipHoverTarget")
+    await user.hover(tooltip)
+
+    expect(screen.queryByText("the content")).not.toBeInTheDocument()
 
     expect(useRefSpy).toHaveBeenCalledWith(null)
-    expect(wrapper).toMatchSnapshot()
   })
 
-  it("should render and match snapshots when ellipsized", () => {
-    const useRefSpy = jest.spyOn(React, "useRef").mockReturnValue({
+  it("should render when ellipsized", async () => {
+    const user = userEvent.setup()
+    const useRefSpy = vi.spyOn(React, "useRef").mockReturnValue({
       current: {
         // Pretend the body is smaller than its onscreen area.
         offsetWidth: 100,
@@ -61,21 +75,29 @@ describe("Tooltip component", () => {
       },
     })
 
-    jest.spyOn(React, "useEffect").mockImplementation(f => f())
+    vi.spyOn(React, "useEffect").mockImplementation(f => f())
 
-    const wrapper = shallow(
+    render(
       <OverflowTooltip
         content="the content"
         placement={Placement.AUTO}
         style={{}}
       >
         the child
-      </OverflowTooltip>
+      </OverflowTooltip>,
+      {
+        wrapper: ({ children }) => (
+          <ThemeProvider theme={mockTheme.emotion}>{children}</ThemeProvider>
+        ),
+      }
     )
 
-    expect(wrapper.props().content).toBe("the content")
+    const tooltip = screen.getByTestId("stTooltipHoverTarget")
+    await user.hover(tooltip)
+
+    const tooltipContent = await screen.findByText("the content")
+    expect(tooltipContent).toBeInTheDocument()
 
     expect(useRefSpy).toHaveBeenCalledWith(null)
-    expect(wrapper).toMatchSnapshot()
   })
 })

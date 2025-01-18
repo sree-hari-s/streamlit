@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ export interface Theme {
 }
 
 /** Data sent in the custom Streamlit render event. */
-export interface RenderData<ArgType=any> {
+export interface RenderData<ArgType = any> {
   args: ArgType;
   disabled: boolean;
   theme?: Theme;
@@ -51,7 +51,7 @@ enum ComponentMessageType {
 
   // The component has a new height for its iframe.
   // Data: { height: number }
-  SET_FRAME_HEIGHT = "streamlit:setFrameHeight"
+  SET_FRAME_HEIGHT = "streamlit:setFrameHeight",
 }
 
 /**
@@ -68,6 +68,9 @@ export class Streamlit {
   public static readonly API_VERSION = 1;
 
   public static readonly RENDER_EVENT = "streamlit:render";
+
+  public static readonly INJECTED_STYLE_ELEMENT_ID =
+    "__streamlit_injected_styles";
 
   /** Dispatches events received from Streamlit. */
   public static readonly events = new EventTarget();
@@ -88,7 +91,7 @@ export class Streamlit {
     }
 
     Streamlit.sendBackMsg(ComponentMessageType.COMPONENT_READY, {
-      apiVersion: Streamlit.API_VERSION
+      apiVersion: Streamlit.API_VERSION,
     });
   };
 
@@ -148,7 +151,7 @@ export class Streamlit {
     }
     Streamlit.sendBackMsg(ComponentMessageType.SET_COMPONENT_VALUE, {
       value,
-      dataType
+      dataType,
     });
   };
 
@@ -166,7 +169,12 @@ export class Streamlit {
    * Handle an untyped Streamlit render event and redispatch it as a
    * StreamlitRenderEvent.
    */
-  private static onRenderMessage = <ArgType=any, >(data: {args: ArgType, dfs?: ArgsDataframe[], disabled?: boolean, theme?: Theme}): void => {
+  private static onRenderMessage = <ArgType = any>(data: {
+    args: ArgType;
+    dfs?: ArgsDataframe[];
+    disabled?: boolean;
+    theme?: Theme;
+  }): void => {
     let args = data["args"];
     if (args == null) {
       console.error(
@@ -183,7 +191,7 @@ export class Streamlit {
 
     args = {
       ...args,
-      ...dataframeArgs
+      ...dataframeArgs,
     };
 
     const disabled = Boolean(data["disabled"]);
@@ -194,9 +202,12 @@ export class Streamlit {
 
     // Dispatch a render event!
     const eventData = { disabled, args, theme };
-    const event = new CustomEvent<RenderData<ArgType>>(Streamlit.RENDER_EVENT, {
-      detail: eventData
-    });
+    const event = new CustomEvent<RenderData<ArgType>>(
+      Streamlit.RENDER_EVENT,
+      {
+        detail: eventData,
+      }
+    );
     Streamlit.events.dispatchEvent(event);
   };
 
@@ -220,7 +231,7 @@ export class Streamlit {
       {
         isStreamlitMessage: true,
         type: type,
-        ...data
+        ...data,
       },
       "*"
     );
@@ -228,8 +239,12 @@ export class Streamlit {
 }
 
 const _injectTheme = (theme: Theme) => {
-  const style = document.createElement("style");
-  document.head.appendChild(style);
+  let style = document.getElementById(Streamlit.INJECTED_STYLE_ELEMENT_ID);
+  if (!style) {
+    style = document.createElement("style");
+    style.id = Streamlit.INJECTED_STYLE_ELEMENT_ID;
+    document.head.appendChild(style);
+  }
   style.innerHTML = `
     :root {
       --primary-color: ${theme.primaryColor};

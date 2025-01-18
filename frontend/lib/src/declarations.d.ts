@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,27 +14,27 @@
  * limitations under the License.
  */
 
-// We don't have typings for deck.gl, so let's make it untyped.
-declare module "deck.gl"
-
-declare module "@deck.gl/json"
-
-declare module "@deck.gl/layers"
-
-declare module "@deck.gl/aggregation-layers"
-
-declare module "@deck.gl/geo-layers"
-
-declare module "@deck.gl/mesh-layers"
-
 declare module "@loaders.gl/core"
 
 declare module "@loaders.gl/csv"
 
 declare module "@loaders.gl/gltf"
 
+declare module "native-file-system-adapter"
+
 declare module "fzy.js" {
   export function score(pattern: string, subject: string): number
   export function positions(pattern: string, subject: string): Array<number>
   export function hasMatch(pattern: string, subject: string): boolean
+}
+
+// Type definition for an internal component in react-color. We need to override
+// some of it to fix a bug in the color picker that triggers a security error when
+// the color picker is closed in a cross-origin iframe, see `BaseColorPicker.tsx`.
+declare module "react-color/es/components/common/Saturation" {
+  import React from "react"
+  export default class Saturation extends React.Component<any, any> {
+    container: HTMLElement
+    getContainerRenderWindow(): Window & typeof globalThis
+  }
 }

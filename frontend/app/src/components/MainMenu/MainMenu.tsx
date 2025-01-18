@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
+ * Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,33 +15,36 @@
  */
 
 import React, { forwardRef, memo, MouseEvent, ReactElement } from "react"
+
 import { StatefulMenu } from "baseui/menu"
 import { PLACEMENT, StatefulPopover } from "baseui/popover"
 import { MoreVert } from "@emotion-icons/material-rounded"
 import { useTheme } from "@emotion/react"
 
 import {
-  EmotionTheme,
   BaseButton,
   BaseButtonKind,
+  Config,
+  EmotionTheme,
   Icon,
   IGuestToHostMessage,
   IMenuItem,
-  Config,
+  notNullOrUndefined,
   PageConfig,
 } from "@streamlit/lib"
-import { SegmentMetricsManager } from "@streamlit/app/src/SegmentMetricsManager"
+import ScreenCastRecorder from "@streamlit/app/src/util/ScreenCastRecorder"
+import { MetricsManager } from "@streamlit/app/src/MetricsManager"
 
 import {
   StyledCoreItem,
   StyledDevItem,
+  StyledMainMenuContainer,
+  StyledMenuContainer,
   StyledMenuDivider,
   StyledMenuItem,
   StyledMenuItemLabel,
   StyledMenuItemShortcut,
   StyledRecordingIndicator,
-  StyledMenuContainer,
-  StyledMainMenuContainer,
 } from "./styled-components"
 
 const SCREENCAST_LABEL: { [s: string]: string } = {
@@ -83,7 +86,7 @@ export interface Props {
 
   toolbarMode: Config.ToolbarMode
 
-  metricsMgr: SegmentMetricsManager
+  metricsMgr: MetricsManager
 }
 
 const getOpenInWindowCallback = (url: string) => (): void => {
@@ -110,7 +113,7 @@ export interface SubMenuProps {
   menuItems: any[]
   closeMenu: () => void
   isDevMenu: boolean
-  metricsMgr: SegmentMetricsManager
+  metricsMgr: MetricsManager
 }
 
 // BaseWeb provides a very basic list item (or option) for its dropdown
@@ -127,7 +130,7 @@ export interface SubMenuProps {
 //  * creating a forward ref to add properties to the DOM element.
 function buildMenuItemComponent(
   StyledMenuItemType: typeof StyledCoreItem | typeof StyledDevItem,
-  metricsMgr: SegmentMetricsManager
+  metricsMgr: MetricsManager
 ): any {
   const MenuItem = forwardRef<HTMLLIElement, MenuItemProps>(
     (
@@ -174,7 +177,7 @@ function buildMenuItemComponent(
       return (
         <>
           {hasDividerAbove && (
-            <StyledMenuDivider data-testid="main-menu-divider" />
+            <StyledMenuDivider data-testid="stMainMenuDivider" />
           )}
           <StyledMenuItem
             ref={ref}
@@ -202,8 +205,9 @@ function buildMenuItemComponent(
 }
 
 const SubMenu = (props: SubMenuProps): ReactElement => {
-  const { colors }: EmotionTheme = useTheme()
+  const { colors, sizes, spacing }: EmotionTheme = useTheme()
   const StyledMenuItemType = props.isDevMenu ? StyledDevItem : StyledCoreItem
+
   return (
     <StatefulMenu
       items={props.menuItems}
@@ -215,7 +219,7 @@ const SubMenu = (props: SubMenuProps): ReactElement => {
         Option: buildMenuItemComponent(StyledMenuItemType, props.metricsMgr),
         List: {
           props: {
-            "data-testid": "main-menu-list",
+            "data-testid": "stMainMenuList",
           },
           style: {
             backgroundColor: "inherit",
@@ -225,10 +229,13 @@ const SubMenu = (props: SubMenuProps): ReactElement => {
             borderLeftRadius: 0,
             borderRightRadius: 0,
 
+            paddingBottom: spacing.sm,
+            paddingTop: spacing.sm,
+
             ":focus": {
               outline: "none",
             },
-            border: `1px solid ${colors.fadedText10}`,
+            border: `${sizes.borderWidth} solid ${colors.borderColor}`,
           },
         },
       }}
@@ -236,7 +243,10 @@ const SubMenu = (props: SubMenuProps): ReactElement => {
   )
 }
 
-function getDevMenuItems(coreDevMenuItems: Record<string, any>): any[] {
+function getDevMenuItems(
+  theme: EmotionTheme,
+  coreDevMenuItems: Record<string, any>
+): any[] {
   const devMenuItems = []
   const preferredDevMenuOrder: any[] = [
     coreDevMenuItems.developerOptions,
@@ -259,10 +269,10 @@ function getDevMenuItems(coreDevMenuItems: Record<string, any>): any[] {
     }
   }
 
-  if (devLastMenuItem != null) {
+  if (notNullOrUndefined(devLastMenuItem)) {
     devLastMenuItem.styleProps = {
-      margin: "0 0 -.5rem 0",
-      padding: ".25rem 0 .25rem 1.5rem",
+      margin: `0 0 -${theme.spacing.sm} 0`,
+      padding: `${theme.spacing.twoXS} ${theme.spacing.none} ${theme.spacing.twoXS} ${theme.spacing.twoXL}`,
     }
   }
   return devMenuItems
@@ -288,7 +298,7 @@ function getPreferredMenuOrder(
     // If the first or last item is a divider, delete it, because
     // we don't want to start/end the menu with it.
     // TODO(sfc-gh-kbregula): We should use Array#at when supported by
-    //  browsers/cypress or transpilers.
+    //  browsers or transpilers.
     //  See: https://github.com/tc39/proposal-relative-indexing-method
     while (
       preferredMenuOrder.length > 0 &&
@@ -310,7 +320,9 @@ function getPreferredMenuOrder(
     coreMenuItems.settings,
     coreMenuItems.DIVIDER,
     coreMenuItems.print,
-    coreMenuItems.recordScreencast,
+    ...(ScreenCastRecorder.isSupportedBrowser()
+      ? [coreMenuItems.recordScreencast]
+      : []),
     coreMenuItems.DIVIDER,
     coreMenuItems.report,
     coreMenuItems.community,
@@ -319,7 +331,9 @@ function getPreferredMenuOrder(
   ]
 }
 
-function MainMenu(props: Props): ReactElement {
+function MainMenu(props: Readonly<Props>): ReactElement {
+  const theme: EmotionTheme = useTheme()
+
   const isServerDisconnected = !props.isServerConnected
 
   const showAboutMenu =
@@ -373,9 +387,9 @@ function MainMenu(props: Props): ReactElement {
       noHighlight: true,
       interactions: {},
       styleProps: {
-        fontSize: "0.75rem",
-        margin: "-.5rem 0 0 0",
-        padding: ".25rem 0 .25rem 1.5rem",
+        fontSize: theme.fontSizes.twoSmPx,
+        margin: `-${theme.spacing.sm} 0 0 0`,
+        padding: `${theme.spacing.twoXS} ${theme.spacing.none} ${theme.spacing.twoXS} ${theme.spacing.twoXL}`,
         pointerEvents: "none",
       },
     },
@@ -392,16 +406,12 @@ function MainMenu(props: Props): ReactElement {
       return coreMenuItems.DIVIDER
     }
 
-    if (item.key === "reportBug") {
-      if (props.menuItems?.hideGetHelp) {
-        return null
-      }
+    if (item.key === "reportBug" && props.menuItems?.hideGetHelp) {
+      return null
     }
 
-    if (item.key === "about") {
-      if (props.menuItems?.aboutSectionMd !== "") {
-        return null
-      }
+    if (item.key === "about" && props.menuItems?.aboutSectionMd !== "") {
+      return null
     }
 
     return {
@@ -438,7 +448,7 @@ function MainMenu(props: Props): ReactElement {
   }
 
   const devMenuItems: any[] = props.developmentMode
-    ? getDevMenuItems(coreDevMenuItems)
+    ? getDevMenuItems(theme, coreDevMenuItems)
     : []
 
   if (menuItems.length == 0 && devMenuItems.length == 0) {
@@ -473,12 +483,17 @@ function MainMenu(props: Props): ReactElement {
       overrides={{
         Body: {
           props: {
-            "data-testid": "main-menu-popover",
+            "data-testid": "stMainMenuPopover",
+            className: "stMainMenuPopover",
           },
         },
       }}
     >
-      <StyledMainMenuContainer id="MainMenu">
+      <StyledMainMenuContainer
+        id="MainMenu"
+        className="stMainMenu"
+        data-testid="stMainMenu"
+      >
         <BaseButton kind={BaseButtonKind.HEADER_NO_PADDING}>
           <Icon content={MoreVert} size="lg" />
         </BaseButton>
